@@ -126,6 +126,14 @@ For this task: parallel-safe. No fallback needed.
 - The ownership map is the contract. The implementer agent will refuse to edit files outside its workstream's ownership list. If you forget a file, the implementer will surface the gap as feedback and the loop will route back to you.
 - If two workstreams legitimately need the same shared file (e.g. a route registry, a feature flag list), the architecter must choose one owner and have the other workstream make a coordination handoff (e.g. backend produces a manifest that frontend reads). Avoid shared writes.
 - The data model section already constrains what new files exist; the ownership map cites them by exact path.
+- **Ownership self-check (required output).** Before signaling `DESIGN_READY`, diff the set of files you named as create/modify anywhere in the design prose (§4 Component breakdown, §7 Sequence/flow, §11 Handoff notes/gotchas) against the §9 Ownership map's `owned_files`. Output the result as a subsection in design.md:
+  ```markdown
+  ### Ownership self-check
+  Files named in prose: <list>
+  Owned in §9: <list>
+  Non-empty difference: <none | list any prose-named file missing from the ownership map>
+  ```
+  A non-empty difference is an ownership gap that will cost the loop an implementer round-trip — fix the map before signaling ready. (See wiki lesson `ownership-map-must-cover-prose-references`.) This is not optional: an implementer that honors the ownership boundary will refuse the unowned edit and surface an `ownership-gap.md`, burning a round.
 
 ### When to use stack-profile
 

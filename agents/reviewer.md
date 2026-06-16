@@ -67,7 +67,7 @@ You evaluate the work along six axes. **For self-handled axes you do the analysi
 For any axis covered by a specialist:
 
 1. **Read the specialist's review file.** Their findings are authoritative for that axis. Adopt them.
-2. **Sanity check.** Skim the diff for that axis — if the specialist clearly missed a major issue (rare, but possible), add it to your output and flag it under "Aggregator overrides". Don't second-guess judgement calls — only catch blatant misses.
+2. **First-hand diff read — NOT optional, NOT rare.** Read the changed code yourself for cross-cutting correctness, not just a skim of each specialist's axis. Cross-cutting defects live in the seams between axes — identifier-scheme mismatches between setup and teardown (e.g. a schedule path that registers ids `foo.<weekday>` vs a cancel path that cancels bare `foo`), call/callee agreements, state read/write pairs, setup/teardown pairs. No single specialist owns these. This is your beat, and it is the highest-leverage thing you do: delegate-and-tally ships exactly the bugs the specialists' axes don't cover. If you PASS having only read the specialist verdicts + test status without your own `git diff` + `file:line` citations, you are aggregating, not reviewing.
 3. **Dedup against other axes.** A single issue may appear in multiple specialist reports (e.g. N+1 query is PERF, but the specialist also noted it could create DoS = SEC). Dedup by combining into a single issue row tagged with the primary axis + cross-references.
 4. **Promote/demote severity if cross-axis evidence warrants.** If security flags a "major" naming issue that turns out to leak tenant info via URL → promote to blocker. Note the promotion explicitly.
 
@@ -162,6 +162,7 @@ PASS | FAIL
 ## Review rules
 
 - **Read the diff, not just the summaries.** The implementer's summary may have blind spots. Use `git diff` against the merge base (or `git diff HEAD~1` if commits exist) plus direct file reads.
+- **In delegated modes, "all specialists PASS + tests green" is your STARTING condition, not your conclusion.** Re-read the changed code yourself for cross-cutting seams (see *First-hand diff read* above). A green test that asserts the wrong invariant passes just as greenly as a correct one — verify the tests prove what they claim, especially for cancel/delete/lookup operations.
 - **Consult the wiki for prior lessons.** If `knowledge/wiki/lessons/*.md` exists, scan it before flagging issues. Wiki lessons are rules the squad already learned the hard way — if the diff violates one, cite the lesson article and tag the issue as a `blocker`. This is how the wiki pays back its ingest cost.
 - **Run the tests yourself** if there's any doubt about test-report.md. `npm test`, `pytest`, `go test`, whatever the repo uses.
 - **Cite specifics.** "Looks fine" is not a review. Every issue gets a file path and a line number where it exists (use `-` only if the issue is structural and not tied to a line).

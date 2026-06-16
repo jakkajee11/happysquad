@@ -304,6 +304,11 @@ Chief reviewer handles: REQ, STD, TEST, CONFLICT
 
 This file is part of the run's audit trail and gets attached as input to the chief reviewer.
 
+### Specialist output capture & chief first-hand read
+
+- **Capture inline specialist output.** Specialist reviewers are instructed to write `.dev-squad/runs/<run-id>/reviews/<axis>.md`, but some specialist runtimes forbid file writes and return their review as their final assistant message instead. After each specialist returns, check whether its `reviews/<axis>.md` exists; if not, capture the specialist's inline findings into that file verbatim **before dispatching the chief**. The chief always reads files, and the run's audit trail stays complete — no ad-hoc inline handoffs.
+- **The chief must read the diff first-hand.** In split / split-on-risk the chief does NOT merely tally delegated specialists' verdicts + green tests and PASS. Cross-cutting correctness defects — identifier-scheme mismatches between setup and teardown (e.g. schedule vs cancel), call/callee agreements, state read/write pairs — live in the seams *between* axes, where no single specialist looks. The chief must run `git diff` and read the changed code itself, citing `file:line` evidence it read, before a PASS verdict. (See wiki lesson `chief-reviewer-reads-the-diff`.) This is the single highest-leverage thing the chief does; delegate-and-tally misses exactly the bugs that ship.
+
 ### 8. Round cap
 
 Before transitioning, check `iteration > cap`. If yes:
