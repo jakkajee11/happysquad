@@ -18,7 +18,7 @@ title: <Article title — concept name, not source title>
 topic: <Matches parent directory, e.g., "subsystems">
 sources: <Author or org + date>; <Author or org + date>; ...
 raw: [<descriptive-name>](../../raw/<topic>/<file>.md); [<descriptive-name>](../../raw/<topic>/<file>.md)
-related_runs: <Optional comma-separated dev-squad run-ids that fed this article>
+related_runs: <Optional comma-separated happysquad run-ids that fed this article>
 updated: <YYYY-MM-DD — date the article's knowledge content last changed>
 tags: <Optional comma-separated tags; omit if none>
 ---
@@ -95,9 +95,9 @@ Different wiki topics warrant different default sections. Use these as starting 
 
 ## Field rules
 
-- **sources** — semicolon-separated. Each entry is "Author or organization + date" (e.g., `dev-squad architecter 2026-05-20`; `Stripe Engineering 2025-09`). When the same author appears multiple times, list each instance with its own date.
+- **sources** — semicolon-separated. Each entry is "Author or organization + date" (e.g., `happysquad architecter 2026-05-20`; `Stripe Engineering 2025-09`). When the same author appears multiple times, list each instance with its own date.
 - **raw** — semicolon-separated markdown links. Each link must point to an existing file under `knowledge/raw/<topic>/`. Path is relative to `knowledge/wiki/<topic>/`, so it is `../../raw/<topic>/<file>.md`.
-- **related_runs** — optional. Lists the dev-squad run-ids or session-ids that contributed to this article. Useful for tracing wiki content back to the runs that produced it.
+- **related_runs** — optional. Lists the happysquad run-ids or session-ids that contributed to this article. Useful for tracing wiki content back to the runs that produced it.
 - **updated** — refresh whenever the article's knowledge content materially changes. Do NOT update for cosmetic edits.
 - **topic** — must match the parent directory name. Lint uses this to detect misfiled articles.
 
@@ -111,7 +111,7 @@ Always use standard markdown links: `[Title](relative/path.md)`. Never `[[wikili
 ---
 title: API Key Authentication
 topic: subsystems
-sources: dev-squad architecter 2026-05-20; dev-squad reviewer 2026-05-20; Stripe Engineering 2025-09
+sources: happysquad architecter 2026-05-20; happysquad reviewer 2026-05-20; Stripe Engineering 2025-09
 raw: [add-auth-design](../../raw/designs/2026-05-20-20260520-103045-add-auth-design.md); [add-auth-review](../../raw/reviews/2026-05-20-20260520-103045-add-auth-review.md); [stripe-idempotency](../../raw/patterns/2025-09-12-idempotency-keys-at-scale.md)
 related_runs: 20260520-103045-add-auth
 updated: 2026-05-20
@@ -146,4 +146,4 @@ The middleware layer (`src/middleware/auth.ts`) extracts the `Authorization: Bea
 - Keep the lead paragraph short and dense — index entries pull their summary from this.
 - Use H2 (`##`) for major sections. Avoid H3+ unless an article truly needs deep nesting.
 - `Conflicts` and `See Also` are omitted when empty. Don't write empty placeholders.
-- Articles can mix dev-squad raw sources and external raw sources freely. That's the point — internal knowledge cross-pollinates with external best practices.
+- Articles can mix happysquad raw sources and external raw sources freely. That's the point — internal knowledge cross-pollinates with external best practices.

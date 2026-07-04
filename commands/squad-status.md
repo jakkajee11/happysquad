@@ -1,13 +1,13 @@
 ---
-description: Show the dev-squad's current state — active run, last agent, iteration count, reviewer verdicts so far, files touched, and what's recommended next.
+description: Show the happysquad's current state — active run, last agent, iteration count, reviewer verdicts so far, files touched, and what's recommended next.
 ---
 
-Report a concise status of any active dev-squad work — stack profile, dev-loop runs, brainstorm sessions, fleet runs, and wiki health.
+Report a concise status of any active happysquad work — stack profile, dev-loop runs, brainstorm sessions, fleet runs, and wiki health.
 
 Steps:
 
-1. Look for `.dev-squad/stack-profile.md`, `.dev-squad/state.json` (dev-loop runs), any `.dev-squad/brainstorms/*/session.json` (brainstorm sessions), and any `.dev-squad/fleets/*/fleet.json` (fleet runs).
-2. If none exist, say "No dev-squad activity on record. Start with /squad-detect to scan the stack, or /brainstorm / /dev-squad-loop / /squad-fleet." Stop.
+1. Look for `.happysquad/stack-profile.md`, `.happysquad/state.json` (dev-loop runs), any `.happysquad/brainstorms/*/session.json` (brainstorm sessions), and any `.happysquad/fleets/*/fleet.json` (fleet runs).
+2. If none exist, say "No happysquad activity on record. Start with /squad-detect to scan the stack, or /brainstorm / /happysquad-loop / /squad-fleet." Stop.
    If in-progress work exists in any mode, mention at the top: "Resume any of these with /squad-resume." (State persists across sessions — closing and reopening does not lose progress.)
 3. **Stack section** (only if `stack-profile.md` exists):
    - Primary stack one-liner (read from the Summary section of stack-profile.md)
@@ -25,7 +25,7 @@ Steps:
    - Last reviewer verdict and route (if any) — plus workstream targets when parallel
    - Conflict-check status: CLEAN / VIOLATIONS / pending
    - Files changed so far (`git diff --name-only` against the merge base, or against `HEAD` if no merge base detected)
-   - Next recommended command (e.g. "Continue with /dev-squad-loop to resume", "Run /implement to address feedback", "Run nothing — loop is COMPLETE")
+   - Next recommended command (e.g. "Continue with /happysquad-loop to resume", "Run /implement to address feedback", "Run nothing — loop is COMPLETE")
    - If `current_state` is `BLOCKED`, also show the top 3 blocking issues from the most recent review.md.
 
 5. **Fleet section** (only if any fleet.json exists with status != complete or was the most recently updated):
@@ -40,7 +40,7 @@ Steps:
    - Agents that have completed the current round vs still pending
    - If status is `complete`, show the convergence verdict (full-consensus / minor-dissent / major-dissent) and DISSENT count
    - Pointer to `consensus.md` if it exists
-   - Next recommended command (e.g. "Continue with /brainstorm to resume", "Proceed to /dev-squad-loop", or "Review consensus.md before deciding")
+   - Next recommended command (e.g. "Continue with /brainstorm to resume", "Proceed to /happysquad-loop", or "Review consensus.md before deciding")
 7. **Wiki section** (only if `knowledge/wiki/index.md` exists):
    - Article count by topic (decisions/N, lessons/N, patterns/N, runbook/N, subsystems/N)
    - Most recent ingest (from the last entry in `knowledge/wiki/log.md`)

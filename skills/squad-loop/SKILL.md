@@ -1,16 +1,16 @@
 ---
 name: squad-loop
 description: |
-  Orchestrates the dev-squad's four-agent hand-off loop (architecter → implementer → tester → reviewer)
+  Orchestrates the happysquad's four-agent hand-off loop (architecter → implementer → tester → reviewer)
   for a software-development task. Defines the state machine, per-state inputs and outputs, the routing
   table the reviewer drives, the round cap, and the BLOCKED escalation. Trigger when the user runs
-  /dev-squad-loop, asks to "run the squad", "start the dev loop", "iterate until pass", or invokes any of
+  /happysquad-loop, asks to "run the squad", "start the dev loop", "iterate until pass", or invokes any of
   /architect, /implement, /test, /review individually.
 ---
 
 # Squad Loop
 
-The orchestrator that drives the four dev-squad agents through one task until the reviewer says PASS or the round cap is hit.
+The orchestrator that drives the four happysquad agents through one task until the reviewer says PASS or the round cap is hit.
 
 ## State machine
 
@@ -50,11 +50,11 @@ A FAIL routed to implementer/tester where **every blocker has a machine-checkabl
 | REVIEW (specialists, split / split-on-risk) | 0-4 specialists in parallel: security-reviewer, performance-reviewer, requirement-reviewer, standard-reviewer | design + diff + per-axis context | `reviews/<axis>.md` per dispatched specialist | `<AXIS>_REVIEW_READY: …` per specialist |
 | REVIEW (chief)     | reviewer (chief)       | design + all workstream artifacts + conflict-check + evidence-check + risk-detection + dispatched specialists' review files + diff | `review.md` (aggregated) | `REVIEW_READY: …`         |
 
-All paths are under `.dev-squad/runs/<run-id>/` at the repo root.
+All paths are under `.happysquad/runs/<run-id>/` at the repo root.
 
 ## State file
 
-Orchestrator maintains `.dev-squad/state.json` (or `.dev-squad/runs/<run-id>/state.json` when this run is a fleet child — see fleet-orchestrator skill):
+Orchestrator maintains `.happysquad/state.json` (or `.happysquad/runs/<run-id>/state.json` when this run is a fleet child — see fleet-orchestrator skill):
 
 ```json
 {
@@ -107,7 +107,7 @@ Update this file after every state transition. Never delete history.
 
 ## Configuration
 
-Read `.dev-squad/config.json` if present. Defaults if missing:
+Read `.happysquad/config.json` if present. Defaults if missing:
 
 ```json
 {
@@ -132,15 +132,15 @@ Honor the `models` block when launching subagents — pass the configured model 
 When invoked:
 
 1. If `<task>` is empty, ask the user for the task description with AskUserQuestion. Do not invent a task.
-2. **Stack profile check** — look for `.dev-squad/stack-profile.md`:
+2. **Stack profile check** — look for `.happysquad/stack-profile.md`:
    - If absent → tell the user "First run in this project — scanning stack (one-time setup)" and invoke the `stack-detector` skill to produce `stack-profile.md` and `stack-profile.json` before continuing.
    - If present → read `stack-profile.json` to get per-agent skill recommendations. Check whether any manifest file (package.json, *.csproj, go.mod, Cargo.toml, etc.) has a `mtime` newer than the profile's `generated_at` — if yes, prompt: "Project manifests changed since last scan. Refresh stack profile? — yes / no / never-ask-again". Honor the answer.
 3. **Project conventions check (CLAUDE.md)** — the squad's agents work best when the project ships a `CLAUDE.md` (build/test commands, code style, conventions); Claude Code auto-loads it into every agent's context. Look for `CLAUDE.md` at the repo root or `.claude/CLAUDE.md`:
    - If present → nothing to do; it is already in context.
-   - If absent AND `.dev-squad/.claude-md-nudged` does not exist → tell the user once: "No CLAUDE.md found — the squad runs better with one (project conventions, build/test commands, code style). Agents read it automatically." Then AskUserQuestion: "Generate one now (runs /init), then continue" / "Continue without — don't ask again" / "Continue without — ask next time". Honor the answer: on generate, run `/init` then continue; on don't-ask-again, write `.dev-squad/.claude-md-nudged` and continue; on ask-next-time, continue without writing the marker. Never block the loop on this — it is advisory.
+   - If absent AND `.happysquad/.claude-md-nudged` does not exist → tell the user once: "No CLAUDE.md found — the squad runs better with one (project conventions, build/test commands, code style). Agents read it automatically." Then AskUserQuestion: "Generate one now (runs /init), then continue" / "Continue without — don't ask again" / "Continue without — ask next time". Honor the answer: on generate, run `/init` then continue; on don't-ask-again, write `.happysquad/.claude-md-nudged` and continue; on ask-next-time, continue without writing the marker. Never block the loop on this — it is advisory.
 4. Generate `run_id` = `YYYYMMDD-HHMMSS-<slug-of-first-6-task-words>`.
-5. Create `.dev-squad/runs/<run-id>/`.
-6. Load or create `.dev-squad/state.json` and `.dev-squad/config.json`.
+5. Create `.happysquad/runs/<run-id>/`.
+6. Load or create `.happysquad/state.json` and `.happysquad/config.json`.
 7. Record `base_ref` = `git rev-parse HEAD` in state.json (`null` if the repo has no commits yet), and note a dirty tree if `git status --porcelain` is non-empty. Every "changed since loop start" diff, the conflict gate, and the tester's red→green proof measure against this ref.
 8. Set `current_state = ARCHITECT`, `iteration = 1`.
 
@@ -164,7 +164,7 @@ For each state, do this in order:
 
 ### 3. Evidence gate
 
-Completion markers are **claims, not facts**. Verify every claim against evidence, record the verified values, then transition. Append each gate's result to `.dev-squad/runs/<run-id>/evidence-check.md` (one section per gate per iteration: what was claimed, what was verified, verdict).
+Completion markers are **claims, not facts**. Verify every claim against evidence, record the verified values, then transition. Append each gate's result to `.happysquad/runs/<run-id>/evidence-check.md` (one section per gate per iteration: what was claimed, what was verified, verdict).
 
 **After IMPLEMENT / each PARALLEL_IMPLEMENT wave:**
 
@@ -256,7 +256,7 @@ For multi-workstream runs:
 1. **Ownership compliance** — for each workstream, run `git diff --name-only <base_ref> --` (base_ref from state.json) scoped to its files. Confirm every file changed by workstream W is in `state.json.workstreams[W].owned_files`. Any file outside is a CONFLICT.
 2. **Disjoint diff sets** — confirm the per-workstream diff sets do not overlap. Overlap is a CONFLICT.
 3. **Integration build** — run the project's full build/test command once across the merged state. If `npm run build`, `dotnet build`, etc. succeed individually but fail integrated, that's a CONFLICT.
-4. Write `.dev-squad/runs/<run-id>/conflict-check.md` with one of:
+4. Write `.happysquad/runs/<run-id>/conflict-check.md` with one of:
    - `Status: CLEAN` + a short table of per-workstream diff counts.
    - `Status: VIOLATIONS` + a list of violations (file, workstream(s) involved, reason).
 
@@ -270,7 +270,7 @@ If clean:
 
 If at ARCHITECT, the architecter outputs a design with overlapping ownership (or a Conflict surface section with non-empty rows) AND the user/orchestrator decides parallelism is still desired:
 
-1. Create a git worktree per workstream at `.dev-squad/worktrees/<run-id>/<workstream>/`.
+1. Create a git worktree per workstream at `.happysquad/worktrees/<run-id>/<workstream>/`.
 2. Each parallel implementer + tester runs inside its worktree (pass the worktree path as the working directory to the Agent tool).
 3. After PARALLEL_TEST, the orchestrator **merges** worktrees back into the main repo:
    a. For each workstream's worktree, run `git diff --no-color` to capture changes.
@@ -278,7 +278,7 @@ If at ARCHITECT, the architecter outputs a design with overlapping ownership (or
    c. If any patch fails to apply (true conflict), abort the merge and route to ARCHITECT — the partition is genuinely overlapping and must be redesigned.
 4. CONFLICT_GATE runs on the merged main repo. The integration build catches issues the worktrees couldn't see in isolation.
 
-Worktree mode is opt-in via `.dev-squad/config.json`:
+Worktree mode is opt-in via `.happysquad/config.json`:
 
 ```json
 { "parallel_isolation": "ownership-then-worktree" }
@@ -290,7 +290,7 @@ Default is `ownership-then-worktree` (try ownership first, fall back to worktree
 
 ### 9. REVIEW state — mode dispatch
 
-The REVIEW state runs after CONFLICT_GATE. It supports three modes set in `.dev-squad/config.json`:
+The REVIEW state runs after CONFLICT_GATE. It supports three modes set in `.happysquad/config.json`:
 
 ```json
 { "review_mode": "split-on-risk" }
@@ -350,7 +350,7 @@ Match file paths and diff content against these patterns. Multiple matches = mul
 
 #### Risk-detection output
 
-The orchestrator writes `.dev-squad/runs/<run-id>/risk-detection.md` summarizing the matches:
+The orchestrator writes `.happysquad/runs/<run-id>/risk-detection.md` summarizing the matches:
 
 ```markdown
 # Risk detection — run <run-id> iteration <N>
@@ -371,7 +371,7 @@ This file is part of the run's audit trail and gets attached as input to the chi
 
 ### Specialist output capture & chief first-hand read
 
-- **Capture inline specialist output.** Specialist reviewers are instructed to write `.dev-squad/runs/<run-id>/reviews/<axis>.md`, but some specialist runtimes forbid file writes and return their review as their final assistant message instead. After each specialist returns, check whether its `reviews/<axis>.md` exists; if not, capture the specialist's inline findings into that file verbatim **before dispatching the chief**. The chief always reads files, and the run's audit trail stays complete — no ad-hoc inline handoffs.
+- **Capture inline specialist output.** Specialist reviewers are instructed to write `.happysquad/runs/<run-id>/reviews/<axis>.md`, but some specialist runtimes forbid file writes and return their review as their final assistant message instead. After each specialist returns, check whether its `reviews/<axis>.md` exists; if not, capture the specialist's inline findings into that file verbatim **before dispatching the chief**. The chief always reads files, and the run's audit trail stays complete — no ad-hoc inline handoffs.
 - **The chief must read the diff first-hand.** In split / split-on-risk the chief does NOT merely tally delegated specialists' verdicts + green tests and PASS. Cross-cutting correctness defects — identifier-scheme mismatches between setup and teardown (e.g. schedule vs cancel), call/callee agreements, state read/write pairs — live in the seams *between* axes, where no single specialist looks. The chief must run `git diff` and read the changed code itself, citing `file:line` evidence it read, before a PASS verdict. (See wiki lesson `chief-reviewer-reads-the-diff`.) This is the single highest-leverage thing the chief does; delegate-and-tally misses exactly the bugs that ship.
 
 ### 10. Round cap
@@ -379,7 +379,7 @@ This file is part of the run's audit trail and gets attached as input to the chi
 Before transitioning, check `iteration > cap`. If yes — or the convergence check (§4) triggered an early stop:
 
 1. Set `current_state = BLOCKED`.
-2. Write `.dev-squad/runs/<run-id>/BLOCKED.md` summarizing:
+2. Write `.happysquad/runs/<run-id>/BLOCKED.md` summarizing:
    - The original task
    - Every reviewer verdict so far (table from history)
    - The current blocking issues
@@ -402,7 +402,7 @@ One retry, then escalate. Two identical failures in a row means the problem is s
 Each manual command corresponds to one state. When the user invokes one directly:
 
 - `/architect <task>` → run ARCHITECT only, then stop. Do not auto-advance.
-- `/implement` → assumes `.dev-squad/runs/<run-id>/design.md` exists for the current run-id (from state.json), or asks which run to use.
+- `/implement` → assumes `.happysquad/runs/<run-id>/design.md` exists for the current run-id (from state.json), or asks which run to use.
 - `/test` → assumes implementation.md exists.
 - `/review` → assumes test-report.md exists.
 
@@ -410,7 +410,7 @@ Manual invocations still write to the same state.json so the user can switch bet
 
 ## Feedback file format
 
-When a review fails and the loop routes back, the orchestrator extracts the reviewer's issues into `.dev-squad/runs/<run-id>/feedback.md`:
+When a review fails and the loop routes back, the orchestrator extracts the reviewer's issues into `.happysquad/runs/<run-id>/feedback.md`:
 
 ```markdown
 # Feedback for iteration <N+1>
@@ -446,7 +446,7 @@ When the loop ends, surface:
 - Iteration count used
 - Files changed (from `git diff --name-only <base_ref>`)
 - Verified coverage percentage (from the evidence gate, not the tester's claim)
-- Pointer to `.dev-squad/runs/<run-id>/review.md` for full detail
+- Pointer to `.happysquad/runs/<run-id>/review.md` for full detail
 
 Keep this terminal output under 200 words. The detail is on disk.
 
@@ -471,9 +471,9 @@ Never auto-ingest. The user owns the wiki write boundary.
 
 ## Resuming an interrupted loop
 
-If `.dev-squad/state.json` exists and `current_state` is not `COMPLETE` or `BLOCKED` when the orchestrator starts:
+If `.happysquad/state.json` exists and `current_state` is not `COMPLETE` or `BLOCKED` when the orchestrator starts:
 
 1. Ask the user: "An in-progress run exists for `<task>` (iteration <N>, last state <STATE>). Resume, restart, or start a new task?"
 2. On Resume: pick up at the state recorded in state.json.
-3. On Restart: archive the old run dir to `.dev-squad/runs/<run-id>-abandoned-<timestamp>/` and start fresh.
+3. On Restart: archive the old run dir to `.happysquad/runs/<run-id>-abandoned-<timestamp>/` and start fresh.
 4. On New task: start fresh with a new run-id.

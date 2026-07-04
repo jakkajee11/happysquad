@@ -1,18 +1,18 @@
 ---
 name: dev-wiki
 description: |
-  Maintains a compounding project knowledge base for the dev-squad, based on Andrej Karpathy's
+  Maintains a compounding project knowledge base for the happysquad, based on Andrej Karpathy's
   LLM-wiki pattern. State lives in `knowledge/raw/` (immutable ingested sources — designs, reviews,
   brainstorm consensuses, BLOCKED reports, tech summaries, external docs) and `knowledge/wiki/`
   (LLM-compiled articles organized by topic, cross-linked, cascade-updated). Triggers: ingest this
   into the wiki, add to project wiki, what do we know about X, what does the wiki say, archive this
   answer, lint the wiki, project wiki, LLM wiki, Karpathy wiki, /wiki-ingest, /wiki-ask, /wiki-lint.
-  Auto-detects dev-squad artifacts (.dev-squad/runs/* and .dev-squad/brainstorms/*) and extracts
-  their structure on ingest. Distinct from .dev-squad/ run state (per-task working files) and from
+  Auto-detects happysquad artifacts (.happysquad/runs/* and .happysquad/brainstorms/*) and extracts
+  their structure on ingest. Distinct from .happysquad/ run state (per-task working files) and from
   any external KB sync.
 ---
 
-# Dev-Squad Wiki
+# Happysquad Wiki
 
 A compounding knowledge base for the squad's project. Designs, reviews, brainstorm consensuses, BLOCKED reports — every artifact the squad produces can be ingested as a raw source and synthesized into wiki articles that survive across runs. The wiki is the squad's institutional memory.
 
@@ -40,7 +40,7 @@ The skill exposes three operations triggered by separate commands:
 | Lint      | `/wiki-lint`   | Deterministic auto-fixes plus heuristic findings.              |
 
 Plus implicit operations:
-- `/dev-squad-loop` offers to ingest a finished run's `design.md` + `review.md` + `BLOCKED.md` (if any).
+- `/happysquad-loop` offers to ingest a finished run's `design.md` + `review.md` + `BLOCKED.md` (if any).
 - `/brainstorm` offers to ingest a finished session's `consensus.md` + `signoffs.md`.
 
 These offers are opt-in — the user always confirms before anything gets written to the wiki.
@@ -49,7 +49,7 @@ These offers are opt-in — the user always confirms before anything gets writte
 
 ```
 <repo root>/
-├── .dev-squad/                 # per-task working files (NOT wiki)
+├── .happysquad/                 # per-task working files (NOT wiki)
 │   ├── runs/<run-id>/
 │   └── brainstorms/<session-id>/
 └── knowledge/                  # the wiki — clean, Obsidian-vault-friendly
@@ -62,7 +62,7 @@ These offers are opt-in — the user always confirms before anything gets writte
             └── <article>.md
 ```
 
-The `.dev-squad/` directory is operational; `knowledge/` is the wiki. Keep them separate — `.dev-squad/` can be `.gitignore`d, `knowledge/` should be committed.
+The `.happysquad/` directory is operational; `knowledge/` is the wiki. Keep them separate — `.happysquad/` can be `.gitignore`d, `knowledge/` should be committed.
 
 ### Obsidian (recommended, optional)
 
@@ -79,7 +79,7 @@ If Query or Lint cannot find the wiki, tell the user "Run an ingest first to ini
 
 ## Default topic taxonomy
 
-For dev-squad work, default topics under `knowledge/wiki/` are:
+For happysquad work, default topics under `knowledge/wiki/` are:
 
 | Topic         | Contains                                                                    |
 |---------------|-----------------------------------------------------------------------------|
@@ -95,9 +95,9 @@ Create new top-level topics sparingly. The taxonomy is meant to stay narrow so t
 
 Fetch a source into `knowledge/raw/`, then compile it into `knowledge/wiki/`. Always both steps.
 
-### Dev-squad artifact mode
+### Happysquad artifact mode
 
-When the `<source>` argument is a path under `.dev-squad/runs/<run-id>/` or `.dev-squad/brainstorms/<session-id>/`, the skill recognizes the file type and extracts structure automatically:
+When the `<source>` argument is a path under `.happysquad/runs/<run-id>/` or `.happysquad/brainstorms/<session-id>/`, the skill recognizes the file type and extracts structure automatically:
 
 | Source file                  | Default raw topic    | Suggested wiki destination(s)                          |
 |------------------------------|----------------------|--------------------------------------------------------|
@@ -116,7 +116,7 @@ For each ingested artifact:
 
 ### External-source mode
 
-When the source is a URL, a path outside `.dev-squad/`, or pasted content:
+When the source is a URL, a path outside `.happysquad/`, or pasted content:
 1. Fetch via available tools. If unreachable, ask the user to paste it.
 2. Pick or create a topic directory under `knowledge/raw/`.
 3. Save as `knowledge/raw/<topic>/YYYY-MM-DD-<slug>.md` with the metadata header.
@@ -132,7 +132,7 @@ Determine where the new content belongs:
 - **New concept** → Create a new article in the most relevant topic directory. Name the file after the concept, not the raw file.
 - **Spans multiple topics** → Place in the primary one; add See Also cross-links to the others.
 
-These are not mutually exclusive. A single dev-squad design may merge into `subsystems/auth.md` *and* create a fresh `decisions/api-key-prefix-format.md`.
+These are not mutually exclusive. A single happysquad design may merge into `subsystems/auth.md` *and* create a fresh `decisions/api-key-prefix-format.md`.
 
 Conflict handling — if the new source contradicts existing content, annotate the disagreement with source attribution. Don't silently overwrite. The squad learns from disagreement, not papered-over consensus.
 
@@ -237,11 +237,11 @@ Append to `log.md`:
 - Ingest updates `index.md` + `log.md`. Archive updates `index.md` + `log.md`. Lint updates `log.md` (and `index.md` only when auto-fixing entries). Plain Query writes nothing.
 - All frontmatter uses standard YAML with semicolon-separated lists for `sources` and `raw` fields.
 
-## Compounding with dev-squad
+## Compounding with happysquad
 
 This is the killer feature: every time the squad finishes work, the wiki gets a little smarter.
 
-After a successful `/dev-squad-loop`:
+After a successful `/happysquad-loop`:
 - Architecter's `design.md` → goes into `subsystems/<name>.md` (or merges into an existing one)
 - Reviewer's `review.md` → flags recurring issue patterns into `lessons/<rule>.md`
 - If the loop hit BLOCKED → `BLOCKED.md` → `lessons/<slug>.md` (mandatory — every BLOCKED that isn't a lesson is a future wasted loop)
@@ -250,7 +250,7 @@ After a successful `/brainstorm`:
 - `consensus.md` → `decisions/<slug>.md` (this is the squad's ADR)
 - Dissenting `signoffs.md` entries become the "Alternatives Considered" section of the decision
 
-The orchestrator does not auto-write any of this. It surfaces the offer with a one-line prompt and the user accepts or declines. Auto-write would silently couple `.dev-squad/` working files to the committed `knowledge/` artifact — too easy to pollute the wiki.
+The orchestrator does not auto-write any of this. It surfaces the offer with a one-line prompt and the user accepts or declines. Auto-write would silently couple `.happysquad/` working files to the committed `knowledge/` artifact — too easy to pollute the wiki.
 
 ## Token discipline
 
@@ -261,7 +261,7 @@ The orchestrator does not auto-write any of this. It surfaces the offer with a o
 
 ## What this is NOT
 
-- Not a replacement for `.dev-squad/` working files. Those stay per-run.
+- Not a replacement for `.happysquad/` working files. Those stay per-run.
 - Not a deploy / publish channel. To push outward (Confluence, Notion, internal docs portal), the user runs their own sync; this skill stops at `knowledge/`.
 - Not version-controlled history. The wiki is the *current best understanding* — historical evolution lives in git on the `knowledge/` directory itself.
 - Not a database. It's plain markdown. Resist the temptation to encode structured data — that's what code is for.

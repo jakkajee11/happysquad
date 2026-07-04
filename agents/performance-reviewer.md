@@ -39,15 +39,15 @@ If you find a defect outside PERF (a SEC bug, a code smell), note it briefly in 
 
 ## Inputs
 
-- `.dev-squad/runs/<run-id>/design.md` — read the data-model and sequence sections to understand expected query patterns
+- `.happysquad/runs/<run-id>/design.md` — read the data-model and sequence sections to understand expected query patterns
 - The actual changed files via `git diff`
-- `.dev-squad/stack-profile.md` — tells you what ORM / cache / queue is in use
+- `.happysquad/stack-profile.md` — tells you what ORM / cache / queue is in use
 - `knowledge/wiki/patterns/` — past performance patterns documented for this project
 - `knowledge/wiki/lessons/` — past PERF lessons; violations are automatic blockers
 
 ## Required output
 
-Write `.dev-squad/runs/<run-id>/reviews/performance.md`:
+Write `.happysquad/runs/<run-id>/reviews/performance.md`:
 
 ```markdown
 # Performance review — run <run-id> iteration <N>
@@ -94,7 +94,7 @@ For each blocker, cite the concrete reason — query plan would be table-scan, l
 ## Completion signal
 
 ```
-PERFORMANCE_REVIEW_READY: .dev-squad/runs/<run-id>/reviews/performance.md verdict=<PASS|FAIL> blockers=<N> majors=<N>
+PERFORMANCE_REVIEW_READY: .happysquad/runs/<run-id>/reviews/performance.md verdict=<PASS|FAIL> blockers=<N> majors=<N>
 ```
 
 ## What you must NOT do

@@ -1,7 +1,7 @@
 ---
 name: brainstorm-session
 description: |
-  Runs a structured 3-round brainstorm where the dev-squad's five agents (product, architecter,
+  Runs a structured 3-round brainstorm where the happysquad's five agents (product, architecter,
   implementer, tester, reviewer) analyze a new requirement or problem together and converge on a
   consensus solution. Round 1 is divergent POV in parallel, round 2 is cross-review in parallel,
   round 3 is single-author synthesis plus per-agent sign-off. Trigger when the user runs
@@ -14,14 +14,14 @@ description: |
 
 A 3-round structured discussion that turns a fresh requirement into a consensus solution the dev-loop can execute against. Designed to front-load disagreement and surface trade-offs *before* the architecter commits to a design, so the loop has fewer rework cycles.
 
-## When to use this vs /dev-squad-loop
+## When to use this vs /happysquad-loop
 
 | Situation                                                                   | Use this        |
 |-----------------------------------------------------------------------------|-----------------|
 | Brand-new requirement, multiple plausible approaches, unclear scope         | /brainstorm     |
-| Requirement is well-scoped and the path is obvious                          | /dev-squad-loop |
+| Requirement is well-scoped and the path is obvious                          | /happysquad-loop |
 | Existing design failed review — design itself looks wrong                   | /brainstorm     |
-| Existing design failed review — implementation bug                          | /dev-squad-loop |
+| Existing design failed review — implementation bug                          | /happysquad-loop |
 | Stakeholder gave a vague ask, e.g. "let users export their data"            | /brainstorm     |
 
 A brainstorm typically costs more tokens than skipping straight to architect, but saves rounds when the problem space is genuinely ambiguous. When in doubt, the architecter can run alone and the user can escalate to brainstorm if the round-1 design feels off.
@@ -41,7 +41,7 @@ Each agent in the brainstorm has a fixed perspective. Do not let them drift out 
 ## File layout the session produces
 
 ```
-.dev-squad/brainstorms/<session-id>/
+.happysquad/brainstorms/<session-id>/
 ├── topic.md                  # the input requirement, copied verbatim
 ├── session.json              # metadata + state
 ├── round1-product.md
@@ -83,10 +83,10 @@ Each agent in the brainstorm has a fixed perspective. Do not let them drift out 
 ### Setup
 
 1. If `<topic>` is empty, ask the user with AskUserQuestion. Do not invent a topic.
-2. **Stack profile check** — same as squad-loop: if `.dev-squad/stack-profile.md` is missing, invoke `stack-detector` first ("First run in this project — scanning stack"). If present but a manifest is newer than the profile, offer to refresh. The brainstorm's 5 agents will receive their per-agent skill list from `stack-profile.json` when dispatched.
-3. **Project conventions check (CLAUDE.md)** — same as squad-loop: if no `CLAUDE.md` exists at the repo root or `.claude/CLAUDE.md` and `.dev-squad/.claude-md-nudged` is absent, nudge the user once (generate via /init / don't-ask-again / ask-next-time, recording the choice in the marker). Advisory — never blocks the session.
+2. **Stack profile check** — same as squad-loop: if `.happysquad/stack-profile.md` is missing, invoke `stack-detector` first ("First run in this project — scanning stack"). If present but a manifest is newer than the profile, offer to refresh. The brainstorm's 5 agents will receive their per-agent skill list from `stack-profile.json` when dispatched.
+3. **Project conventions check (CLAUDE.md)** — same as squad-loop: if no `CLAUDE.md` exists at the repo root or `.claude/CLAUDE.md` and `.happysquad/.claude-md-nudged` is absent, nudge the user once (generate via /init / don't-ask-again / ask-next-time, recording the choice in the marker). Advisory — never blocks the session.
 4. Generate session-id.
-5. Create `.dev-squad/brainstorms/<session-id>/`.
+5. Create `.happysquad/brainstorms/<session-id>/`.
 6. Write `topic.md` containing the verbatim topic plus any attached context the user provided.
 7. Initialize `session.json` with `current_round = 1`, `status = in_progress`.
 
@@ -136,7 +136,7 @@ Round 3 is sequential because the consensus must exist before sign-off:
 
 ### Convergence rules
 
-- **full-consensus** = 4 of 4 sign-offs APPROVE → recommend proceeding to /dev-squad-loop.
+- **full-consensus** = 4 of 4 sign-offs APPROVE → recommend proceeding to /happysquad-loop.
 - **minor-dissent** = 1 of 4 dissents and the dissenter's blocking condition is small (their own paragraph names a "smallest change that would flip me to APPROVE") → present the dissent to the user with the suggested fix; offer to amend consensus and re-sign or proceed anyway.
 - **major-dissent** = 2 or more dissents, OR a dissent whose blocking condition is fundamental → surface the disagreement to the user with the dissenting paragraphs verbatim; suggest a 4th round only if the user requests it; otherwise stop.
 
@@ -150,15 +150,15 @@ Status set to `complete`. Report back to the user with:
 - a 5-line summary of the consensus
 - the dissenting positions verbatim (if any)
 - pointer to `consensus.md`
-- the question: **"Proceed to /dev-squad-loop with this consensus as the task input?"**
+- the question: **"Proceed to /happysquad-loop with this consensus as the task input?"**
 
 Always ask. Never auto-pipe — the user opted into "ถามผู้ใช้ก่อน".
 
-If the user says yes, hand off `consensus.md` to /dev-squad-loop as the task description (specifically, the orchestrator pre-fills `task` with a one-paragraph distillation from consensus.md + attaches the full file as design input that the architecter will read first thing).
+If the user says yes, hand off `consensus.md` to /happysquad-loop as the task description (specifically, the orchestrator pre-fills `task` with a one-paragraph distillation from consensus.md + attaches the full file as design input that the architecter will read first thing).
 
 ### Wiki offer (after consensus is written)
 
-After surfacing the consensus summary and *before* the "proceed to /dev-squad-loop?" question, ask one follow-up:
+After surfacing the consensus summary and *before* the "proceed to /happysquad-loop?" question, ask one follow-up:
 
 > Ingest this consensus into the wiki as a Decision? `consensus.md` would become `decisions/<slug>.md`, with dissenting sign-offs becoming the Alternatives Considered section. — yes / no / preview
 

@@ -37,7 +37,7 @@ Use this format for `knowledge/wiki/index.md`. The index is the global catalog o
 - **Missing files** — Lint marks the entry as `[MISSING]` rather than deleting:
   - `- [Old Article](archive/old.md) — [MISSING] previously summarized X · Updated 2026-02-10`
 
-## Default topics for dev-squad
+## Default topics for happysquad
 
 The default taxonomy below is what the skill creates on first ingest. Project teams can extend it but should keep the list short:
 

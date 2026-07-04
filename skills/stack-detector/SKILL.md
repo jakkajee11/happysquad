@@ -3,9 +3,9 @@ name: stack-detector
 description: |
   Scans the project to detect tech stack — languages, frameworks, test runners, build tools, conventions —
   then matches detected signals against installed skills (plugin-bundled, user-level, marketplace) and writes
-  per-agent skill recommendations to `.dev-squad/stack-profile.md`. Triggers: /squad-detect, "detect the stack",
+  per-agent skill recommendations to `.happysquad/stack-profile.md`. Triggers: /squad-detect, "detect the stack",
   "what tech is this project", "which skills should we use", "scan stack signals", "stack profile",
-  "tech stack detection". Also auto-invoked by /dev-squad-loop and /brainstorm on first run in a project
+  "tech stack detection". Also auto-invoked by /happysquad-loop and /brainstorm on first run in a project
   (when no stack-profile.md exists).
 ---
 
@@ -20,17 +20,17 @@ The squad is generic by design — works with any stack. But "generic" leaves pe
 ## Where the profile lives
 
 ```
-.dev-squad/stack-profile.md          # human-readable, agent-readable
-.dev-squad/stack-profile.json        # structured signals, parseable
+.happysquad/stack-profile.md          # human-readable, agent-readable
+.happysquad/stack-profile.json        # structured signals, parseable
 ```
 
 Both are written by every detection run. Agents read the markdown for context; orchestrators read the JSON to pick per-agent skill assignments.
 
 ## Refresh policy
 
-- **First run** — when `/dev-squad-loop` or `/brainstorm` starts and `stack-profile.md` does not exist, auto-run detection. Tell the user "Scanning project stack — one-time setup."
+- **First run** — when `/happysquad-loop` or `/brainstorm` starts and `stack-profile.md` does not exist, auto-run detection. Tell the user "Scanning project stack — one-time setup."
 - **Stale check** — at each subsequent loop/brainstorm start, compare `stack-profile.json` generated_at against the last-modified time of any manifest file (package.json, *.csproj, go.mod, etc.). If a manifest changed after profile generation, prompt: "Project manifests changed since last scan. Refresh stack profile? — yes / no / never-ask-again".
-- **Manual** — `/squad-detect` always runs a fresh scan, even if a profile exists. Archive the old profile to `.dev-squad/stack-profile-<timestamp>.md` for diff.
+- **Manual** — `/squad-detect` always runs a fresh scan, even if a profile exists. Archive the old profile to `.happysquad/stack-profile-<timestamp>.md` for diff.
 
 ## Detection signals
 
@@ -292,5 +292,5 @@ The whole detection pass should be under 30 tool calls and finish in a single ag
 When the profile is written, your final message must include:
 
 ```
-STACK_PROFILE_READY: .dev-squad/stack-profile.md gaps=<N>
+STACK_PROFILE_READY: .happysquad/stack-profile.md gaps=<N>
 ```

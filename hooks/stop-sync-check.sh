@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# dev-squad Stop hook — at most ONE nudge per session.
+# happysquad Stop hook — at most ONE nudge per session.
 # If source code changed this session (commits since session start, or a dirty tree) but no
-# progress anchor (PROGRESS.md or .dev-squad/progress.md) was updated, remind to journal it so
+# progress anchor (PROGRESS.md or .happysquad/progress.md) was updated, remind to journal it so
 # the next session can resume. Exit 2 surfaces the reminder to the model; the one-shot marker
 # (written here, cleared by the SessionStart hook) guarantees no loop. Silent outside a
-# dev-squad project. Never fails the session on error.
+# happysquad project. Never fails the session on error.
 set -u
 
-DEVSQUAD_DIR=".dev-squad"
-[ -d "$DEVSQUAD_DIR" ] || exit 0
+HAPPYSQUAD_DIR=".happysquad"
+[ -d "$HAPPYSQUAD_DIR" ] || exit 0
 command -v git >/dev/null 2>&1 || exit 0
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
-[ -f "$DEVSQUAD_DIR/.sync-nudged" ] && exit 0   # already nudged this session → never loop
+[ -f "$HAPPYSQUAD_DIR/.sync-nudged" ] && exit 0   # already nudged this session → never loop
 
-start=$(cat "$DEVSQUAD_DIR/.session-head" 2>/dev/null || echo "")
+start=$(cat "$HAPPYSQUAD_DIR/.session-head" 2>/dev/null || echo "")
 head=$(git rev-parse HEAD 2>/dev/null || echo "")
 
 committed=""
@@ -31,6 +31,6 @@ code=$(printf '%s\n' "$changed" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|css|prisma|p
 # progress anchor already journaled this session? → fine
 printf '%s\n' "$changed" | grep -qiE '(^|/)progress\.md$' && exit 0
 
-touch "$DEVSQUAD_DIR/.sync-nudged" 2>/dev/null || true
-echo "Sync reminder: source changed this session but no progress log was updated. Add a one-line entry to PROGRESS.md (or .dev-squad/progress.md) — what changed / what's next — so the next session can resume, then finish." >&2
+touch "$HAPPYSQUAD_DIR/.sync-nudged" 2>/dev/null || true
+echo "Sync reminder: source changed this session but no progress log was updated. Add a one-line entry to PROGRESS.md (or .happysquad/progress.md) — what changed / what's next — so the next session can resume, then finish." >&2
 exit 2

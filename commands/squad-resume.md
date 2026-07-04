@@ -1,18 +1,18 @@
 ---
-description: Resume the most recent in-progress dev-squad work — scans all state files, finds the latest run/brainstorm/fleet that isn't finished, and continues from exactly where it left off.
+description: Resume the most recent in-progress happysquad work — scans all state files, finds the latest run/brainstorm/fleet that isn't finished, and continues from exactly where it left off.
 ---
 
-Find and continue in-progress dev-squad work. State survives across sessions because it lives in `.dev-squad/` inside the repo, so this command works after closing and reopening a session.
+Find and continue in-progress happysquad work. State survives across sessions because it lives in `.happysquad/` inside the repo, so this command works after closing and reopening a session.
 
 Steps:
 
 1. Scan for state across all three modes:
-   - `.dev-squad/state.json` — dev-loop runs. In-progress = `current_state` is not `COMPLETE` and not `BLOCKED`.
-   - `.dev-squad/brainstorms/*/session.json` — brainstorm sessions. In-progress = `status == "in_progress"`.
-   - `.dev-squad/fleets/*/fleet.json` — fleet runs. In-progress = `status == "in_progress"`.
+   - `.happysquad/state.json` — dev-loop runs. In-progress = `current_state` is not `COMPLETE` and not `BLOCKED`.
+   - `.happysquad/brainstorms/*/session.json` — brainstorm sessions. In-progress = `status == "in_progress"`.
+   - `.happysquad/fleets/*/fleet.json` — fleet runs. In-progress = `status == "in_progress"`.
 2. Build a candidate list. For each candidate capture: kind (dev-loop / brainstorm / fleet), task or topic, current position (state / round / running-count), and `updated_at`.
 3. Branch on the count:
-   - **Zero candidates** → tell the user: "No in-progress dev-squad work found. Start with /dev-squad-loop, /brainstorm, or /squad-fleet." Stop.
+   - **Zero candidates** → tell the user: "No in-progress happysquad work found. Start with /happysquad-loop, /brainstorm, or /squad-fleet." Stop.
    - **Exactly one** → resume it directly (step 4).
    - **More than one** → use AskUserQuestion to let the user pick which to resume. Show each candidate's kind, task/topic, position, and how long ago it was updated. Default-highlight the most recently updated.
 4. Resume the chosen candidate by loading the right skill and entering its resume protocol:

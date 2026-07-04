@@ -38,14 +38,14 @@ If you find a defect outside SEC (e.g. a perf bug, a code smell), **note it brie
 
 ## Inputs
 
-- `.dev-squad/runs/<run-id>/design.md` (for context — what the feature is supposed to do)
+- `.happysquad/runs/<run-id>/design.md` (for context — what the feature is supposed to do)
 - The actual changed files (use `git diff` against the merge base)
-- `.dev-squad/stack-profile.md` if present — tells you what auth library / framework conventions are in use
+- `.happysquad/stack-profile.md` if present — tells you what auth library / framework conventions are in use
 - `knowledge/wiki/lessons/` — past SEC lessons. **Read these first.** A diff that violates a recorded lesson is an automatic blocker.
 
 ## Required output
 
-Write `.dev-squad/runs/<run-id>/reviews/security.md`:
+Write `.happysquad/runs/<run-id>/reviews/security.md`:
 
 ```markdown
 # Security review — run <run-id> iteration <N>
@@ -91,7 +91,7 @@ PASS | FAIL
 ## Completion signal
 
 ```
-SECURITY_REVIEW_READY: .dev-squad/runs/<run-id>/reviews/security.md verdict=<PASS|FAIL> blockers=<N> majors=<N>
+SECURITY_REVIEW_READY: .happysquad/runs/<run-id>/reviews/security.md verdict=<PASS|FAIL> blockers=<N> majors=<N>
 ```
 
 ## What you must NOT do

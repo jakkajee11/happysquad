@@ -1,4 +1,4 @@
-# dev-squad
+# happysquad
 
 A five-agent software development squad with five layers, all designed to run safely in Claude Agent Team's parallel-dispatch model:
 
@@ -29,33 +29,33 @@ A five-agent software development squad with five layers, all designed to run sa
 | `requirement-reviewer` | sonnet | REQ  | Only in `split` mode (REQ is core to every diff; risk-conditional dispatch adds no signal) |
 | `standard-reviewer`    | sonnet | STD  | Only in `split` mode                                              |
 
-`product` participates in brainstorms by default; it does not run inside `/dev-squad-loop` unless you invoke it explicitly. The other four (core, non-product) plus 0-4 specialists form the dev-loop quartet + reviewer council.
+`product` participates in brainstorms by default; it does not run inside `/happysquad-loop` unless you invoke it explicitly. The other four (core, non-product) plus 0-4 specialists form the dev-loop quartet + reviewer council.
 
-Model assignment uses the **Balanced** strategy — heavier reasoning (product judgment, design, review) on opus; mechanical work (write code, write tests) on sonnet. Override in `.dev-squad/config.json`.
+Model assignment uses the **Balanced** strategy — heavier reasoning (product judgment, design, review) on opus; mechanical work (write code, write tests) on sonnet. Override in `.happysquad/config.json`.
 
 ## Commands
 
 | Command            | Description                                                                       |
 |--------------------|-----------------------------------------------------------------------------------|
 | `/brainstorm`      | Run a 3-round session where all five agents analyze a topic together. **Use when the path is unclear.** |
-| `/dev-squad-loop`  | Run the full architect → implement → test → review loop until PASS or cap. **Use when the path is clear.** |
+| `/happysquad-loop`  | Run the full architect → implement → test → review loop until PASS or cap. **Use when the path is clear.** |
 | `/architect`       | Run only the architecter — produce a design, stop.                                |
 | `/implement`       | Run only the implementer against the current run's design.                        |
 | `/test`            | Run only the tester against the current run's implementation.                     |
 | `/review`          | Run only the reviewer against the current run's tests.                            |
 | `/squad-status`    | Show the active run / brainstorm state, history, and recommended next action.     |
-| `/wiki-ingest`     | Ingest a source (dev-squad artifact, URL, file, paste) into the project wiki.     |
+| `/wiki-ingest`     | Ingest a source (happysquad artifact, URL, file, paste) into the project wiki.     |
 | `/wiki-ask`        | Ask the wiki a question — answers with citations to wiki articles.                |
 | `/wiki-lint`       | Run quality checks on the wiki (auto-fix links + heuristic findings).             |
 | `/squad-detect`    | Scan the project to detect tech stack and write per-agent skill recommendations.  |
-| `/squad-fleet`     | Run multiple independent dev-squad-loop tasks in parallel, each in its own worktree. |
+| `/squad-fleet`     | Run multiple independent happysquad-loop tasks in parallel, each in its own worktree. |
 | `/squad-resume`    | Continue the most recent in-progress run / brainstorm / fleet after a session restart. |
 
-All commands share `.dev-squad/` state for runs/brainstorms and `knowledge/` for the wiki, so you can move freely between modes. A typical full workflow is `/brainstorm` → review consensus → ingest decision to wiki → `/dev-squad-loop` → ingest design and lessons to wiki.
+All commands share `.happysquad/` state for runs/brainstorms and `knowledge/` for the wiki, so you can move freely between modes. A typical full workflow is `/brainstorm` → review consensus → ingest decision to wiki → `/happysquad-loop` → ingest design and lessons to wiki.
 
 ## Review modes
 
-The reviewer council operates in one of three modes (set in `.dev-squad/config.json`):
+The reviewer council operates in one of three modes (set in `.happysquad/config.json`):
 
 ```json
 { "review_mode": "split-on-risk" }
@@ -76,7 +76,7 @@ The dispatched specialists run **in parallel with the chief reviewer**, not befo
 
 The squad is designed for Claude Agent Team's parallel dispatch. There are two distinct parallelism layers:
 
-### Within-task parallelism (single `/dev-squad-loop`)
+### Within-task parallelism (single `/happysquad-loop`)
 
 The architecter's design document includes a Workstreams table and an Ownership map. Each workstream is a unit of independent build (e.g. backend / frontend / infra), with a `depends_on` field defining a DAG. The orchestrator:
 
@@ -88,13 +88,13 @@ The architecter's design document includes a Workstreams table and an Ownership 
 
 Each `implementer` / `tester` agent receives an `owned_files` list and **refuses to edit anything outside it**. If a file is missing from the list, it stops and writes `OWNERSHIP_GAP` — the orchestrator routes back to architecter rather than letting workstreams silently collide.
 
-For genuinely overlapping designs, the orchestrator falls back to git worktrees per workstream (configurable via `parallel_isolation` in `.dev-squad/config.json`). Default = ownership-first, worktree-fallback.
+For genuinely overlapping designs, the orchestrator falls back to git worktrees per workstream (configurable via `parallel_isolation` in `.happysquad/config.json`). Default = ownership-first, worktree-fallback.
 
 ### Fleet parallelism (`/squad-fleet`)
 
-For multiple unrelated tasks (a backlog of features, a sweep of bug fixes), `/squad-fleet` creates one git worktree per task on its own branch and runs full `/dev-squad-loop` instances concurrently. Up to `max_parallel` (default 4) children run in flight at any time. The fleet orchestrator:
+For multiple unrelated tasks (a backlog of features, a sweep of bug fixes), `/squad-fleet` creates one git worktree per task on its own branch and runs full `/happysquad-loop` instances concurrently. Up to `max_parallel` (default 4) children run in flight at any time. The fleet orchestrator:
 
-- Tracks each child in `.dev-squad/fleets/<fleet-id>/fleet.json`.
+- Tracks each child in `.happysquad/fleets/<fleet-id>/fleet.json`.
 - Never auto-merges branches — the user owns merge timing.
 - Surfaces an aggregate report with PASS / BLOCKED counts, suggested merge commands, and BLOCKED.md pointers for failed tasks.
 - A BLOCKED child does not stall the fleet — others keep going.
@@ -103,13 +103,13 @@ Wiki ingests at the end of a fleet are intentionally serialized (one at a time) 
 
 ## Cross-session resume
 
-All squad state lives on disk in `.dev-squad/` (and `knowledge/` for the wiki), inside your repo — not in any session-scoped scratch space. So **closing and reopening a session never loses progress.**
+All squad state lives on disk in `.happysquad/` (and `knowledge/` for the wiki), inside your repo — not in any session-scoped scratch space. So **closing and reopening a session never loses progress.**
 
 When you come back:
 
-- A **SessionStart hook** runs a tiny check against `.dev-squad/`. If there's in-progress work, it prints a one-line nudge ("you have a dev-loop at iteration 2 — run /squad-resume"). If there's nothing to resume, it prints nothing and costs zero tokens.
+- A **SessionStart hook** runs a tiny check against `.happysquad/`. If there's in-progress work, it prints a one-line nudge ("you have a dev-loop at iteration 2 — run /squad-resume"). If there's nothing to resume, it prints nothing and costs zero tokens.
 - **`/squad-resume`** scans every state file (`state.json`, brainstorm `session.json`, fleet `fleet.json`), finds the most recently updated work that isn't COMPLETE/BLOCKED, and continues it from exactly where it stopped. If multiple things are in progress, it asks which to resume.
-- Each mode also self-resumes: re-running `/dev-squad-loop`, `/brainstorm`, or `/squad-fleet` detects in-progress state and offers resume / restart / new.
+- Each mode also self-resumes: re-running `/happysquad-loop`, `/brainstorm`, or `/squad-fleet` detects in-progress state and offers resume / restart / new.
 
 BLOCKED runs are never auto-resumed — they need a human decision, so `/squad-resume` surfaces them and points at the `BLOCKED.md` instead of silently retrying.
 
@@ -117,7 +117,7 @@ BLOCKED runs are never auto-resumed — they need a human decision, so `/squad-r
 
 ## The stack detector
 
-The first time `/dev-squad-loop` or `/brainstorm` runs in a project, the detector scans the repo (manifests → configs → conventions → sampled source) and writes `.dev-squad/stack-profile.md` + `.dev-squad/stack-profile.json`. Subsequent runs read the profile and pass per-agent skill recommendations to each agent at dispatch time:
+The first time `/happysquad-loop` or `/brainstorm` runs in a project, the detector scans the repo (manifests → configs → conventions → sampled source) and writes `.happysquad/stack-profile.md` + `.happysquad/stack-profile.json`. Subsequent runs read the profile and pass per-agent skill recommendations to each agent at dispatch time:
 
 ```
 architecter receives → fastendpoints, api-contract-design, react-vite-frontend
@@ -130,7 +130,7 @@ You can also run `/squad-detect` manually to refresh the profile after upgrading
 
 The profile is read-only with respect to the project — it never writes to your source code. It only reads manifests, configs, and a small sample of source files.
 
-Alongside the stack scan, setup also checks for a `CLAUDE.md` (repo root or `.claude/CLAUDE.md`). Claude Code auto-loads it into every agent's context, so a project that documents its build/test commands, code style, and conventions there gives the squad a sharper starting point. If none exists, the first `/dev-squad-loop` or `/brainstorm` nudges you once — generate one via `/init`, skip permanently, or skip for now. It's advisory and never blocks the loop; a permanent skip is remembered in `.dev-squad/.claude-md-nudged`.
+Alongside the stack scan, setup also checks for a `CLAUDE.md` (repo root or `.claude/CLAUDE.md`). Claude Code auto-loads it into every agent's context, so a project that documents its build/test commands, code style, and conventions there gives the squad a sharper starting point. If none exists, the first `/happysquad-loop` or `/brainstorm` nudges you once — generate one via `/init`, skip permanently, or skip for now. It's advisory and never blocks the loop; a permanent skip is remembered in `.happysquad/.claude-md-nudged`.
 
 ## The brainstorm session
 
@@ -151,12 +151,12 @@ ROUND 3 — Synthesis + sign-off
   The other 4 agents read it and write APPROVE or DISSENT with reasoning.
 
   Convergence:
-    4/4 APPROVE     → full-consensus → recommend /dev-squad-loop
+    4/4 APPROVE     → full-consensus → recommend /happysquad-loop
     1/4 DISSENT     → minor-dissent  → surface fix-suggestion to user
     2+/4 DISSENT    → major-dissent  → surface, suggest 4th round only if asked
 ```
 
-Brainstorms output to `.dev-squad/brainstorms/<session-id>/`. After the session, the orchestrator **always asks** before piping the consensus into `/dev-squad-loop` — you stay in the driver's seat.
+Brainstorms output to `.happysquad/brainstorms/<session-id>/`. After the session, the orchestrator **always asks** before piping the consensus into `/happysquad-loop` — you stay in the driver's seat.
 
 Quick variants:
 - `/brainstorm --rounds=2` skips cross-review (cheaper, shallower).
@@ -188,7 +188,7 @@ The reviewer is the only agent that fails the loop. Its verdict + `next` field d
 - **Coverage threshold:** 80%
 - **Models:** opus for architecter/reviewer, sonnet for implementer/tester
 
-Override in `.dev-squad/config.json` at the repo root:
+Override in `.happysquad/config.json` at the repo root:
 
 ```json
 {
@@ -206,7 +206,7 @@ Override in `.dev-squad/config.json` at the repo root:
 
 ## The wiki — institutional memory
 
-A Karpathy-style LLM wiki at the repo root, separate from `.dev-squad/` working files:
+A Karpathy-style LLM wiki at the repo root, separate from `.happysquad/` working files:
 
 ```
 knowledge/
@@ -222,7 +222,7 @@ knowledge/
     └── subsystems/            # per-subsystem architecture + known issues
 ```
 
-The wiki compounds: every successful `/dev-squad-loop` and `/brainstorm` ends with an offer to ingest its artifacts. Accepting routes them to the appropriate topic — `design.md` → `subsystems/*`, `BLOCKED.md` → `lessons/*`, `consensus.md` → `decisions/*`.
+The wiki compounds: every successful `/happysquad-loop` and `/brainstorm` ends with an offer to ingest its artifacts. Accepting routes them to the appropriate topic — `design.md` → `subsystems/*`, `BLOCKED.md` → `lessons/*`, `consensus.md` → `decisions/*`.
 
 **Read-back by the agents:**
 
@@ -235,7 +235,7 @@ The wiki is plain markdown with relative links. Point an [Obsidian](https://obsi
 ## File layout the squad produces
 
 ```
-.dev-squad/                              # operational working files (can be .gitignored)
+.happysquad/                              # operational working files (can be .gitignored)
 ├── state.json                           # current dev-loop run, iteration, history
 ├── config.json                          # optional overrides (cap, models, parallel_isolation, max_parallel)
 ├── stack-profile.md                     # human-readable stack scan + per-agent skills
@@ -302,12 +302,12 @@ Each agent ends with a completion marker line (`DESIGN_READY: …`, `IMPLEMENTAT
 /squad-detect
 ```
 
-Scans manifests, configs, and conventions. Writes `stack-profile.md` with per-agent skill recommendations. (You can skip this — `/dev-squad-loop` will run it automatically the first time.)
+Scans manifests, configs, and conventions. Writes `stack-profile.md` with per-agent skill recommendations. (You can skip this — `/happysquad-loop` will run it automatically the first time.)
 
 **Clear requirement → straight to the loop:**
 
 ```text
-/dev-squad-loop add multi-tenant API key auth to the billing service
+/happysquad-loop add multi-tenant API key auth to the billing service
 ```
 
 Expected end-state: PASS verdict, working code + tests committed-ready, coverage ≥ 80%, and a one-line suggested commit message for you to apply.
@@ -318,7 +318,7 @@ Expected end-state: PASS verdict, working code + tests committed-ready, coverage
 /squad-fleet
 ```
 
-You'll be asked to list tasks (or point at a file). The squad creates one git worktree per task on a `fleet/<fleet-id>/<slug>` branch, runs `/dev-squad-loop` in each concurrently (up to `max_parallel`, default 4), and produces an aggregate report with merge suggestions.
+You'll be asked to list tasks (or point at a file). The squad creates one git worktree per task on a `fleet/<fleet-id>/<slug>` branch, runs `/happysquad-loop` in each concurrently (up to `max_parallel`, default 4), and produces an aggregate report with merge suggestions.
 
 **Vague requirement → brainstorm first:**
 
@@ -326,7 +326,7 @@ You'll be asked to list tasks (or point at a file). The squad creates one git wo
 /brainstorm we need to let customers export their own data
 ```
 
-Five agents discuss for 3 rounds in parallel, write a consensus, and ask whether to ingest it into the wiki as a Decision and proceed to `/dev-squad-loop`. You see the full disagreement before any code is touched.
+Five agents discuss for 3 rounds in parallel, write a consensus, and ask whether to ingest it into the wiki as a Decision and proceed to `/happysquad-loop`. You see the full disagreement before any code is touched.
 
 **Cold start on a new subsystem → ask the wiki first:**
 
@@ -336,12 +336,12 @@ Five agents discuss for 3 rounds in parallel, write a consensus, and ask whether
 
 Returns a synthesized answer with citations to `subsystems/*.md`, `lessons/*.md`, and `decisions/*.md` articles. Useful before opening a `/brainstorm` to make sure you're not re-treading ground.
 
-If the dev-loop hits BLOCKED, read `.dev-squad/runs/<run-id>/BLOCKED.md` — and ingest it into the wiki as a `lessons/<slug>.md` entry. Every BLOCKED that isn't captured as a lesson is a future wasted loop. Sometimes the right escalation is `/brainstorm` to re-examine the requirement.
+If the dev-loop hits BLOCKED, read `.happysquad/runs/<run-id>/BLOCKED.md` — and ingest it into the wiki as a `lessons/<slug>.md` entry. Every BLOCKED that isn't captured as a lesson is a future wasted loop. Sometimes the right escalation is `/brainstorm` to re-examine the requirement.
 
 ## Integration
 
 - **Git:** the squad uses `git status`, `git diff`, `git log` for situational awareness. It does **not** commit, branch, push, or stash unless the task explicitly requests it.
-- **External tools:** none required. The plugin is self-contained — all communication happens through local files in `.dev-squad/`.
+- **External tools:** none required. The plugin is self-contained — all communication happens through local files in `.happysquad/`.
 
 ## License
 

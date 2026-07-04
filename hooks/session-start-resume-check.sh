@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
-# dev-squad SessionStart hook.
-# In any project that has a ./.dev-squad dir, prints a compact orientation block:
+# happysquad SessionStart hook.
+# In any project that has a ./.happysquad dir, prints a compact orientation block:
 #   1. git snapshot — recent commits + working-tree status
-#   2. DRIFT warning — when an active dev-squad run has fallen behind git
+#   2. DRIFT warning — when an active happysquad run has fallen behind git
 #      (a commit landed after the loop last updated → likely direct work bypassed it)
-#   3. resume anchor — tail of .dev-squad/progress.md if present.
-#      NOTE: .dev-squad/progress.md is LOCAL/personal — the standard dev-squad .gitignore
-#      ignores .dev-squad/* (except config.json + stack-profile.*), so this file is NOT
+#   3. resume anchor — tail of .happysquad/progress.md if present.
+#      NOTE: .happysquad/progress.md is LOCAL/personal — the standard happysquad .gitignore
+#      ignores .happysquad/* (except config.json + stack-profile.*), so this file is NOT
 #      committed and is NOT shared with teammates. For a SHARED roadmap, keep a tracked file
 #      such as root PROGRESS.md and @import it into CLAUDE.md instead. (To share THIS file,
-#      add an exception to .gitignore: !/.dev-squad/progress.md)
+#      add an exception to .gitignore: !/.happysquad/progress.md)
 #   4. resume nudge — in-progress dev-loop / brainstorm / fleet state
 # Also records the session-start HEAD and clears the Stop hook's one-shot marker.
-# Prints NOTHING outside a dev-squad project (zero context cost). Never fails the session.
+# Prints NOTHING outside a happysquad project (zero context cost). Never fails the session.
 set -u
 
-DEVSQUAD_DIR=".dev-squad"
+HAPPYSQUAD_DIR=".happysquad"
 
-# No dev-squad state in this project → nothing to do (keeps non-dev-squad projects silent).
-[ -d "$DEVSQUAD_DIR" ] || exit 0
+# No happysquad state in this project → nothing to do (keeps non-happysquad projects silent).
+[ -d "$HAPPYSQUAD_DIR" ] || exit 0
 
 # ---------------------------------------------------------------------------
 # git snapshot + drift + session bookkeeping (only inside a git work tree)
 # ---------------------------------------------------------------------------
 if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git rev-parse HEAD > "$DEVSQUAD_DIR/.session-head" 2>/dev/null || true
-  rm -f "$DEVSQUAD_DIR/.sync-nudged" 2>/dev/null || true
+  git rev-parse HEAD > "$HAPPYSQUAD_DIR/.session-head" 2>/dev/null || true
+  rm -f "$HAPPYSQUAD_DIR/.sync-nudged" 2>/dev/null || true
 
-  echo "[dev-squad] git snapshot"
+  echo "[happysquad] git snapshot"
   git log -3 --format='%h %s' 2>/dev/null | sed 's/^/  · /'
   dirty=$(git status --porcelain 2>/dev/null | grep -c .)
   if [ "${dirty:-0}" -gt 0 ]; then
@@ -40,7 +40,7 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
     python3 - <<'PY' 2>/dev/null || true
 import json, subprocess, datetime
 try:
-    d = json.load(open(".dev-squad/state.json"))
+    d = json.load(open(".happysquad/state.json"))
 except Exception:
     raise SystemExit
 st = d.get("current_state")
@@ -54,7 +54,7 @@ try:
     def p(s): return datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
     if p(head) > p(ua):
         task = str(d.get("task", "?")).splitlines()[0][:60]
-        print(f'  ⚠ DRIFT: dev-squad run is at {st} (iter {d.get("iteration","?")}) for "{task}",')
+        print(f'  ⚠ DRIFT: happysquad run is at {st} (iter {d.get("iteration","?")}) for "{task}",')
         print('    but a commit landed after it last updated — likely direct work bypassed the loop.')
         print('    Reconcile: /squad-status, then /squad-resume or mark the run done.')
 except Exception:
@@ -64,18 +64,18 @@ PY
 
   # Local/personal scratch anchor (gitignored, NOT shared — see header note).
   # A shared roadmap should live in a tracked file (e.g. root PROGRESS.md) instead.
-  if [ -f "$DEVSQUAD_DIR/progress.md" ]; then
-    echo "[dev-squad] .dev-squad/progress.md (local scratch — not committed/shared) — tail:"
-    tail -n 8 "$DEVSQUAD_DIR/progress.md" 2>/dev/null | sed 's/^/  /'
+  if [ -f "$HAPPYSQUAD_DIR/progress.md" ]; then
+    echo "[happysquad] .happysquad/progress.md (local scratch — not committed/shared) — tail:"
+    tail -n 8 "$HAPPYSQUAD_DIR/progress.md" 2>/dev/null | sed 's/^/  /'
   fi
 fi
 
 # ---------------------------------------------------------------------------
-# in-progress dev-squad work nudge (original behavior, unchanged)
+# in-progress happysquad work nudge (original behavior, unchanged)
 # ---------------------------------------------------------------------------
 command -v python3 >/dev/null 2>&1 || exit 0
 
-python3 - "$DEVSQUAD_DIR" <<'PYEOF' 2>/dev/null || exit 0
+python3 - "$HAPPYSQUAD_DIR" <<'PYEOF' 2>/dev/null || exit 0
 import json, os, sys, glob
 
 base = sys.argv[1]
@@ -128,7 +128,7 @@ if not candidates:
 # Most-recently-updated first.
 candidates.sort(key=lambda c: c[3] or "", reverse=True)
 
-lines = ["[dev-squad] You have in-progress work that can be resumed:"]
+lines = ["[happysquad] You have in-progress work that can be resumed:"]
 for kind, what, where, _updated in candidates[:5]:
     what = str(what).replace("\n", " ").strip()
     short = (what[:60] + "...") if len(what) > 60 else what

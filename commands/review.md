@@ -7,7 +7,7 @@ Load the `squad-loop` skill at `${CLAUDE_PLUGIN_ROOT}/skills/squad-loop/SKILL.md
 
 Steps:
 
-1. Read `.dev-squad/state.json` to find the active run-id.
+1. Read `.happysquad/state.json` to find the active run-id.
 2. If `test-report.md` is missing for that run, tell the user to run `/test` first. Do not proceed.
 3. If `$ARGUMENTS` is non-empty, pass it to the reviewer as additional focus (e.g. "concentrate on SEC issues").
 4. Update state.json to `current_state = REVIEW`.

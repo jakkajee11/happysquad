@@ -8,8 +8,8 @@ Load the `squad-loop` skill at `${CLAUDE_PLUGIN_ROOT}/skills/squad-loop/SKILL.md
 Steps:
 
 1. If `$ARGUMENTS` is empty, ask the user for the task with AskUserQuestion.
-2. Generate or reuse a run-id; create `.dev-squad/runs/<run-id>/`.
-3. Update `.dev-squad/state.json` to `current_state = ARCHITECT`, `iteration = 1` (or bump if continuing).
+2. Generate or reuse a run-id; create `.happysquad/runs/<run-id>/`.
+3. Update `.happysquad/state.json` to `current_state = ARCHITECT`, `iteration = 1` (or bump if continuing).
 4. Launch the `architecter` subagent via the Agent tool, with model from config (default `opus`). Pass the task, the run-id, and the run directory path.
 5. Wait for the `DESIGN_READY: <path>` completion marker.
 6. Report the path to the design document and stop. Do not auto-advance to /implement.

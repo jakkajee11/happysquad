@@ -1,5 +1,5 @@
 ---
-description: Run multiple independent dev-squad-loop tasks in parallel, each in its own git worktree and branch. Useful for processing a backlog of unrelated features quickly.
+description: Run multiple independent happysquad-loop tasks in parallel, each in its own git worktree and branch. Useful for processing a backlog of unrelated features quickly.
 argument-hint: <tasks-file-path | --max=N | (interactive)>
 ---
 
@@ -13,10 +13,10 @@ Steps:
    - Otherwise treat the rest as a single task description and ask the user how many additional tasks to add.
 2. If no tasks were resolved, use AskUserQuestion to gather them — ask first for the count (1-10), then for each task in turn.
 3. Generate `fleet_id` = `YYYYMMDD-HHMMSS-<slug>` where slug is a short summary of the fleet's purpose (or the first task's first words if no overall purpose).
-4. If `.dev-squad/stack-profile.md` is missing, invoke the `stack-detector` skill once at the fleet root before any child runs.
-5. Create `.dev-squad/fleets/<fleet_id>/`, write `tasks.md`, initialize `fleet.json`.
+4. If `.happysquad/stack-profile.md` is missing, invoke the `stack-detector` skill once at the fleet root before any child runs.
+5. Create `.happysquad/fleets/<fleet_id>/`, write `tasks.md`, initialize `fleet.json`.
 6. Create one git worktree per task per the skill's Worktree creation rules. Base branch defaults to `main` (or whatever the current branch is if `main` doesn't exist).
-7. Dispatch up to `max_parallel` children (default 4) **in a single message with multiple Agent tool calls**. Each child Agent invocation runs `/dev-squad-loop` with the task as arguments and the worktree path as the working directory.
+7. Dispatch up to `max_parallel` children (default 4) **in a single message with multiple Agent tool calls**. Each child Agent invocation runs `/happysquad-loop` with the task as arguments and the worktree path as the working directory.
 8. As children complete, update `fleet.json` and dispatch the next pending child to maintain `max_parallel` in flight. Don't exceed the cap.
 9. When all children resolve (PASS / BLOCKED / FAIL), write the aggregate report per the skill template and offer:
    - Wiki ingest for PASS children (one at a time, never parallel — wiki writes share `knowledge/wiki/index.md`)

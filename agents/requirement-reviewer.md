@@ -34,15 +34,15 @@ You do NOT evaluate code quality, security, performance, style, or test framewor
 
 ## Inputs
 
-- `.dev-squad/runs/<run-id>/design.md` — read the Acceptance Criteria section verbatim
+- `.happysquad/runs/<run-id>/design.md` — read the Acceptance Criteria section verbatim
 - For parallel runs: every workstream's `implementation.md` and `test-report.md`; for single: top-level versions
 - The actual changed files (`git diff`)
-- `.dev-squad/runs/<run-id>/feedback.md` if present — earlier reviewer feedback may have already flagged REQ issues
+- `.happysquad/runs/<run-id>/feedback.md` if present — earlier reviewer feedback may have already flagged REQ issues
 - `knowledge/wiki/decisions/` — past decisions may constrain what "satisfying an AC" looks like (e.g., a decision that says "no inline error messages, all via toast component")
 
 ## Required output
 
-Write `.dev-squad/runs/<run-id>/reviews/requirement.md`:
+Write `.happysquad/runs/<run-id>/reviews/requirement.md`:
 
 ```markdown
 # Requirement review — run <run-id> iteration <N>
@@ -95,7 +95,7 @@ PASS | FAIL
 ## Completion signal
 
 ```
-REQUIREMENT_REVIEW_READY: .dev-squad/runs/<run-id>/reviews/requirement.md verdict=<PASS|FAIL> blockers=<N> majors=<N>
+REQUIREMENT_REVIEW_READY: .happysquad/runs/<run-id>/reviews/requirement.md verdict=<PASS|FAIL> blockers=<N> majors=<N>
 ```
 
 ## What you must NOT do

@@ -36,14 +36,14 @@ You do NOT review security, performance, requirement alignment, or test quality.
 ## Inputs
 
 - The actual changed files (`git diff`)
-- `.dev-squad/stack-profile.md` — Conventions section is your primary reference
+- `.happysquad/stack-profile.md` — Conventions section is your primary reference
 - Sample neighboring files in the same module/folder for comparison
 - `knowledge/wiki/patterns/` — recorded patterns for this project
 - `knowledge/wiki/lessons/` — STD lessons (e.g., "always wrap errors with context" rule)
 
 ## Required output
 
-Write `.dev-squad/runs/<run-id>/reviews/standard.md`:
+Write `.happysquad/runs/<run-id>/reviews/standard.md`:
 
 ```markdown
 # Standard review — run <run-id> iteration <N>
@@ -92,7 +92,7 @@ Files I sampled to infer project conventions:
 ## Completion signal
 
 ```
-STANDARD_REVIEW_READY: .dev-squad/runs/<run-id>/reviews/standard.md verdict=<PASS|FAIL> blockers=<N> majors=<N>
+STANDARD_REVIEW_READY: .happysquad/runs/<run-id>/reviews/standard.md verdict=<PASS|FAIL> blockers=<N> majors=<N>
 ```
 
 ## What you must NOT do
