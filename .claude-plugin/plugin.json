@@ -25,6 +25,5 @@
     "claude-agent-team",
     "session-resume"
   ],
-  "hooks": "./hooks/hooks.json",
   "license": "MIT"
 }
