@@ -31,6 +31,10 @@ If iteration counter > cap (default 5) → BLOCKED.
 
 The `(parallel?)` decision comes from the architecter's `DESIGN_READY: … workstreams=N parallel=<true|false>` marker. `parallel=false` collapses to the linear state machine (just IMPLEMENT → TEST → REVIEW).
 
+Every transition out of an IMPLEMENT/TEST state passes through the **evidence gate** (§3) before the next state runs: completion markers are claims, and the orchestrator verifies them against re-run commands and report files first.
+
+A FAIL routed to implementer/tester where **every blocker has a machine-checkable `Verify` command** takes the **inner fix loop** (§5) — fix → per-finding verify → delta review — instead of the full pipeline.
+
 ## Per-state contract
 
 | State              | Agent(s)               | Reads                                            | Writes                                       | Completion marker         |
@@ -40,10 +44,11 @@ The `(parallel?)` decision comes from the architecter's `DESIGN_READY: … works
 | PARALLEL_IMPLEMENT | N implementers (parallel per wave) | per-workstream design + ownership      | per-workstream source files + `workstreams/<name>/implementation.md` | `IMPLEMENTATION_READY: … workstream=<name>` × N |
 | TEST (single)      | tester                 | `design.md`, `implementation.md`, repo, feedback | test files, `test-report.md`                 | `TESTS_READY: …`          |
 | PARALLEL_TEST      | N testers (parallel per wave) | per-workstream impl + ownership       | per-workstream test files + `workstreams/<name>/test-report.md` | `TESTS_READY: … workstream=<name>` × N |
+| EVIDENCE_GATE      | orchestrator (after every IMPLEMENT/TEST state) | commands + report paths recorded in `implementation.md` / `test-report.md`, repo | `evidence-check.md` (one section per gate) | (internal — no agent)     |
 | CONFLICT_GATE      | orchestrator           | design Ownership map, git diff sets, build       | `conflict-check.md`                          | (internal — no agent)     |
 | RISK_DETECT        | orchestrator (split-on-risk only) | git diff --name-only + diff content    | `risk-detection.md`                          | (internal — no agent)     |
 | REVIEW (specialists, split / split-on-risk) | 0-4 specialists in parallel: security-reviewer, performance-reviewer, requirement-reviewer, standard-reviewer | design + diff + per-axis context | `reviews/<axis>.md` per dispatched specialist | `<AXIS>_REVIEW_READY: …` per specialist |
-| REVIEW (chief)     | reviewer (chief)       | design + all workstream artifacts + conflict-check + risk-detection + dispatched specialists' review files + diff | `review.md` (aggregated) | `REVIEW_READY: …`         |
+| REVIEW (chief)     | reviewer (chief)       | design + all workstream artifacts + conflict-check + evidence-check + risk-detection + dispatched specialists' review files + diff | `review.md` (aggregated) | `REVIEW_READY: …`         |
 
 All paths are under `.dev-squad/runs/<run-id>/` at the repo root.
 
@@ -55,6 +60,7 @@ Orchestrator maintains `.dev-squad/state.json` (or `.dev-squad/runs/<run-id>/sta
 {
   "run_id": "20260520-103045-add-api-key-auth",
   "task": "<one-line task description>",
+  "base_ref": "<git rev-parse HEAD at run start — null if the repo has no commits>",
   "mode": "parallel",
   "parent_fleet_id": null,
   "worktree": null,
@@ -85,7 +91,10 @@ Orchestrator maintains `.dev-squad/state.json` (or `.dev-squad/runs/<run-id>/sta
   "conflict_check": { "status": "pending", "violations": [] },
   "history": [
     { "state": "ARCHITECT", "iteration": 1, "result": "ok", "workstreams_planned": 2 },
-    { "state": "PARALLEL_IMPLEMENT", "iteration": 1, "wave": 1, "workstreams": ["backend"], "result": "ok" }
+    { "state": "PARALLEL_IMPLEMENT", "iteration": 1, "wave": 1, "workstreams": ["backend"], "result": "ok" },
+    { "state": "PARALLEL_TEST", "iteration": 1, "wave": 1, "workstreams": ["backend"], "result": "ok", "verified": { "tests": "pass", "coverage": 84.2 } },
+    { "state": "REVIEW", "iteration": 1, "verdict": "FAIL", "next": "implementer", "blockers": 2, "resolved": 0, "recurring": 0 },
+    { "state": "INNER_FIX", "iteration": 2, "inner_pass": 1, "checks": { "R-1": "pass", "R-2": "pass" } }
   ],
   "started_at": "2026-05-20T10:30:45Z",
   "updated_at": "2026-05-20T11:12:09Z"
@@ -103,6 +112,7 @@ Read `.dev-squad/config.json` if present. Defaults if missing:
 ```json
 {
   "cap": 5,
+  "inner_cap": 2,
   "coverage_threshold": 80,
   "models": {
     "architecter": "opus",
@@ -131,7 +141,8 @@ When invoked:
 4. Generate `run_id` = `YYYYMMDD-HHMMSS-<slug-of-first-6-task-words>`.
 5. Create `.dev-squad/runs/<run-id>/`.
 6. Load or create `.dev-squad/state.json` and `.dev-squad/config.json`.
-7. Set `current_state = ARCHITECT`, `iteration = 1`.
+7. Record `base_ref` = `git rev-parse HEAD` in state.json (`null` if the repo has no commits yet), and note a dirty tree if `git status --porcelain` is non-empty. Every "changed since loop start" diff, the conflict gate, and the tester's red→green proof measure against this ref.
+8. Set `current_state = ARCHITECT`, `iteration = 1`.
 
 ### 2. State step
 
@@ -143,13 +154,38 @@ For each state, do this in order:
    - the run-id
    - the iteration counter
    - file paths for any inputs the agent needs (design.md, feedback.md, etc.)
+   - the run's `base_ref` (the tester needs it for the red→green proof)
    - the model from config
    - **the per-agent skill list from `stack-profile.json`** (under `recommended_skills.<agent-name>`) so the agent loads the right stack-specific skills at the start of its run
-3. Wait for the agent's completion marker line.
-4. Append an entry to `history` in state.json.
-5. Transition per the rules below.
+3. Wait for the agent's completion marker line (malformed/missing → see "Marker protocol & failure handling").
+4. For IMPLEMENT/TEST states, run the **evidence gate** (§3) on the marker's claims. Never transition on an unverified claim.
+5. Append an entry to `history` in state.json, including the gate's `verified` values when present.
+6. Transition per the rules below.
 
-### 3. Transition rules
+### 3. Evidence gate
+
+Completion markers are **claims, not facts**. Verify every claim against evidence, record the verified values, then transition. Append each gate's result to `.dev-squad/runs/<run-id>/evidence-check.md` (one section per gate per iteration: what was claimed, what was verified, verdict).
+
+**After IMPLEMENT / each PARALLEL_IMPLEMENT wave:**
+
+1. Read the build/lint/type-check command(s) the implementer recorded verbatim in implementation.md.
+2. Re-run them (scoped to the workstream in parallel mode). The exit code is the truth — not the implementer's summary.
+3. On mismatch (claimed green, actually red): write the discrepancy (command, exit code, output tail) to feedback.md, `iteration += 1`, re-dispatch the same implementer/workstream. Never hand the tester a build that only claims to compile.
+
+**After TEST / each PARALLEL_TEST wave:**
+
+1. Re-run the exact test command(s) recorded in test-report.md (workstream-scoped in parallel mode). Compare the real exit code and pass/fail counts against the claimed `status`.
+2. Read coverage from the coverage tool's report file — the tester records its path in test-report.md (e.g. `coverage/coverage-summary.json`, `coverage.xml`, `lcov.info`). The verified number from that file is what the REVIEW coverage gate uses; the marker's `coverage=` field is only a claim. No report file → record coverage as `"unverified"` (a TEST finding for the reviewer, not a silent pass).
+3. Confirm test-report.md contains the `## Red→green evidence` section covering the new AC/bugfix tests (see the tester agent). A missing section — or any test recorded as *passing* at `base_ref` — means the tests don't prove the change: write the discrepancy to feedback.md, `iteration += 1`, re-dispatch the tester.
+4. Record `"verified": { "tests": "<pass|fail>", "coverage": <percent | "unverified"> }` in the history entry.
+
+Evidence-gate rules:
+
+- A claim that doesn't reproduce is never "close enough" — route it back. A loop that trusts claims converges on paperwork, not on working code.
+- Full command output goes to disk (test-output.txt or a file referenced from evidence-check.md), not into your context. Quote at most the last ~20 lines inline, and only on failure.
+- Manual entry points (`/implement`, `/test`, `/review`) have no orchestrator, so the gate doesn't run; the reviewer treats unverified numbers as claims (see its evidence-check input).
+
+### 4. Transition rules
 
 After `ARCHITECT`, parse the marker `DESIGN_READY: … workstreams=N parallel=<bool>`:
 
@@ -164,12 +200,41 @@ After `PARALLEL_TEST` → next state = `CONFLICT_GATE`. Then `REVIEW`.
 
 After `REVIEW`:
 - If `verdict=PASS` → next state = `COMPLETE`. Exit loop, report success.
-- If `verdict=FAIL` and `next=architecter` → write reviewer's issues to `feedback.md`, `current_state = ARCHITECT`, `iteration += 1`. The architecter may revise workstreams.
-- If `verdict=FAIL` and `next=implementer` and `mode=single` → `current_state = IMPLEMENT`, `iteration += 1`.
-- If `verdict=FAIL` and `next=implementer` and `mode=parallel` → `current_state = PARALLEL_IMPLEMENT`, but **only re-dispatch the workstreams listed in the reviewer's `workstreams` field** (subset re-dispatch). `iteration += 1`.
-- If `verdict=FAIL` and `next=tester` → analogous to implementer.
+- If `verdict=FAIL` and `next=architecter` → write reviewer's issues to `feedback.md`, `current_state = ARCHITECT`, `iteration += 1`. The architecter may revise workstreams. (Design rework never takes the inner fix loop.)
+- If `verdict=FAIL` and `next=implementer` or `next=tester` → check inner-loop eligibility (§5): if every blocker in review.md has a machine-checkable `Verify` command, run the **inner fix loop** instead of a full pipeline round. Otherwise:
+  - `next=implementer` and `mode=single` → `current_state = IMPLEMENT`, `iteration += 1`.
+  - `next=implementer` and `mode=parallel` → `current_state = PARALLEL_IMPLEMENT`, but **only re-dispatch the workstreams listed in the reviewer's `workstreams` field** (subset re-dispatch). `iteration += 1`.
+  - `next=tester` → analogous to implementer.
 
-### 4. Parallel scheduling
+#### Convergence check — on every FAIL, before routing
+
+The round cap (§10) is the backstop, not the detector. After each FAIL review, compare its issues against the previous review via the reviewer's `Recurrence` column:
+
+- `resolved` = blockers from the previous review that no longer appear.
+- `recurring` = blockers marked `repeat`.
+
+Then apply, in order:
+
+1. **Second repeat → escalate the route.** A blocker on its second repeat (same defect in three consecutive reviews) never goes back to the agent that failed it twice. The reviewer should already have routed it to `architecter`; enforce the override if it didn't, and log the override in history.
+2. **Repeat after redesign → BLOCKED now.** A blocker that recurs *after* an architecter round it triggered has exhausted every route. Go straight to the BLOCKED protocol (§10) — don't burn the remaining rounds.
+3. **Zero-progress round.** If `resolved` is empty — the fix round changed nothing the reviewer could credit — route to `architecter` regardless of the reviewer's `next`. Two consecutive zero-progress rounds → BLOCKED.
+
+Record convergence data in each REVIEW history entry: `"blockers": N, "resolved": N, "recurring": N`. When convergence triggers BLOCKED, BLOCKED.md must include the Convergence analysis section (§10).
+
+### 5. Inner fix loop (per-finding verify)
+
+A review FAIL routed to `implementer` or `tester` does not have to cost a full pipeline round (fix agent → tester → conflict gate → full review). Every issue row in review.md carries a `Verify` command (see the reviewer agent) whose exit code 0 proves that issue is fixed. When **every blocker is machine-checkable** (none marked `manual`), take the cheap path:
+
+1. Write feedback.md as usual — each copied issue row keeps its `Verify` command. `iteration += 1` (the delta review below is this round's REVIEW). Set `current_state = INNER_FIX` and track `inner_pass` in state.json.
+2. Dispatch the fix agent(s). If blockers route to both implementer and tester, dispatch the implementer first, then the tester (tests may depend on the fixed code). Subset workstreams apply as in the outer loop.
+3. When the agent returns, run each blocker's `Verify` command yourself. Record per-check results in evidence-check.md (`inner pass N: R-1 pass, R-2 fail`) and in the history entry.
+4. Any check fails → append the failing checks to feedback.md and re-dispatch the same agent. At most `inner_cap` (default 2) inner passes; if checks still fail after that, fall back to the full outer pipeline (IMPLEMENT/TEST → … → full REVIEW) for this round — the finding is evidently not as mechanical as it looked.
+5. All checks pass → run the full evidence gate (§3): re-run the build and the whole test suite — a targeted fix can break things the per-finding checks don't see. If the suite fails on tests that legitimately need updating, dispatch the tester with the failures before proceeding.
+6. Then CONFLICT_GATE (parallel runs — fixes must stay inside ownership) → dispatch the chief reviewer with `mode=delta`: it confirms each fixed blocker first-hand, scans the fixed files for regressions, and re-issues the verdict. Specialists are NOT re-dispatched unless the fix touched files matching new risk patterns (run risk detection on the fix's changed files only).
+
+The inner loop is a shortcut, not a bypass: the delta review still issues the verdict, the round cap counts every review round, and a single `manual` blocker disqualifies the shortcut entirely.
+
+### 6. Parallel scheduling
 
 When entering `PARALLEL_IMPLEMENT` or `PARALLEL_TEST`:
 
@@ -178,17 +243,17 @@ When entering `PARALLEL_IMPLEMENT` or `PARALLEL_TEST`:
 3. For each wave (sequentially):
    a. Dispatch **all workstreams in this wave in a single message with multiple Agent tool calls**. This is mandatory — separate messages waste wall-clock time and provide no benefit.
    b. Each Agent call passes: task, run-id, iteration, workstream name, owned_files list, paths to design.md and feedback.md (if any), model from config, recommended skills from stack-profile.
-   c. Wait for ALL completion markers in this wave before starting the next wave.
+   c. Wait for ALL completion markers in this wave, then run the evidence gate (§3) on each workstream in the wave, before starting the next wave — dependents must never build on an unverified claim.
    d. Update state.json per-workstream as markers arrive.
 4. If any workstream returns `OWNERSHIP_GAP` instead of READY → halt the wave, write feedback aggregating all ownership gaps from this wave, route back to ARCHITECT to update the ownership map. `iteration += 1`.
 
-### 5. Conflict-detection gate
+### 7. Conflict-detection gate
 
 Run after `PARALLEL_TEST` (and as a no-op pass-through after single-mode `TEST` — write a trivial `conflict-check.md` saying "single-workstream run, no conflict surface").
 
 For multi-workstream runs:
 
-1. **Ownership compliance** — for each workstream, run `git diff --name-only` scoped to its files since the loop started. Confirm every file changed by workstream W is in `state.json.workstreams[W].owned_files`. Any file outside is a CONFLICT.
+1. **Ownership compliance** — for each workstream, run `git diff --name-only <base_ref> --` (base_ref from state.json) scoped to its files. Confirm every file changed by workstream W is in `state.json.workstreams[W].owned_files`. Any file outside is a CONFLICT.
 2. **Disjoint diff sets** — confirm the per-workstream diff sets do not overlap. Overlap is a CONFLICT.
 3. **Integration build** — run the project's full build/test command once across the merged state. If `npm run build`, `dotnet build`, etc. succeed individually but fail integrated, that's a CONFLICT.
 4. Write `.dev-squad/runs/<run-id>/conflict-check.md` with one of:
@@ -201,7 +266,7 @@ If violations exist:
 If clean:
 - Proceed to REVIEW. The reviewer reads conflict-check.md as part of its inputs.
 
-### 6. Worktree fallback
+### 8. Worktree fallback
 
 If at ARCHITECT, the architecter outputs a design with overlapping ownership (or a Conflict surface section with non-empty rows) AND the user/orchestrator decides parallelism is still desired:
 
@@ -223,7 +288,7 @@ Default is `ownership-then-worktree` (try ownership first, fall back to worktree
 - `ownership-only` — never use worktrees; conflict surface always routes back to architecter.
 - `always-worktree` — every parallel run uses worktrees, even when ownership is disjoint. Higher setup cost, stronger isolation.
 
-### 7. REVIEW state — mode dispatch
+### 9. REVIEW state — mode dispatch
 
 The REVIEW state runs after CONFLICT_GATE. It supports three modes set in `.dev-squad/config.json`:
 
@@ -254,7 +319,7 @@ Valid values: `single`, `split`, `split-on-risk`. Default is `split-on-risk`.
 
 Run the **risk detection pass** before dispatch:
 
-1. Compute the changed file list with `git diff --name-only` since loop start.
+1. Compute the changed file list with `git diff --name-only <base_ref>` (base_ref from state.json).
 2. Match each file against the risk patterns below. Collect the set of axes flagged.
 3. For each flagged axis, dispatch the corresponding specialist reviewer **in parallel with the chief reviewer**, all in one multi-Agent-tool message.
 4. Pass the chief reviewer `mode=split-on-risk` and `delegated_specialists=<list of specialists actually dispatched>`. The chief handles non-delegated axes itself, plus always handles TEST + CONFLICT.
@@ -309,17 +374,28 @@ This file is part of the run's audit trail and gets attached as input to the chi
 - **Capture inline specialist output.** Specialist reviewers are instructed to write `.dev-squad/runs/<run-id>/reviews/<axis>.md`, but some specialist runtimes forbid file writes and return their review as their final assistant message instead. After each specialist returns, check whether its `reviews/<axis>.md` exists; if not, capture the specialist's inline findings into that file verbatim **before dispatching the chief**. The chief always reads files, and the run's audit trail stays complete — no ad-hoc inline handoffs.
 - **The chief must read the diff first-hand.** In split / split-on-risk the chief does NOT merely tally delegated specialists' verdicts + green tests and PASS. Cross-cutting correctness defects — identifier-scheme mismatches between setup and teardown (e.g. schedule vs cancel), call/callee agreements, state read/write pairs — live in the seams *between* axes, where no single specialist looks. The chief must run `git diff` and read the changed code itself, citing `file:line` evidence it read, before a PASS verdict. (See wiki lesson `chief-reviewer-reads-the-diff`.) This is the single highest-leverage thing the chief does; delegate-and-tally misses exactly the bugs that ship.
 
-### 8. Round cap
+### 10. Round cap
 
-Before transitioning, check `iteration > cap`. If yes:
+Before transitioning, check `iteration > cap`. If yes — or the convergence check (§4) triggered an early stop:
 
 1. Set `current_state = BLOCKED`.
 2. Write `.dev-squad/runs/<run-id>/BLOCKED.md` summarizing:
    - The original task
    - Every reviewer verdict so far (table from history)
    - The current blocking issues
+   - Convergence analysis: each recurring blocker with the rounds it appeared in, the routes tried, and the fix attempts that failed — this is the raw material for a `lessons/*` wiki entry
    - A recommended next manual action (e.g., "split the task", "consult human reviewer", "adjust acceptance criteria")
 3. Exit the loop and report BLOCKED to the user. Do not silently retry.
+
+## Marker protocol & failure handling
+
+The completion marker is the hand-off contract. Three failure modes, one protocol each — never improvise:
+
+- **Malformed or missing marker.** The agent finished but its final message doesn't match the expected marker format, or the marker names an artifact file that doesn't exist on disk. Do not guess the fields. Re-dispatch the same agent once with: "Your final message must be exactly one line matching `<expected format>` — your artifact file `<path>` {exists|is missing}; finish accordingly." If the second attempt is also malformed → log `{"result": "marker-failure"}` in history and treat the state as FAILED: write feedback.md describing what's missing, `iteration += 1`, route per the normal rules.
+- **Agent error / death.** The Agent tool call errors or returns nothing. Retry the dispatch once, verbatim. A second failure → BLOCKED protocol (§10) with the error captured in BLOCKED.md — an infrastructure failure isn't fixable by looping.
+- **Marker/evidence contradiction.** The marker claims READY but the evidence gate (§3) disproves it — already handled by §3 (feedback + re-dispatch). Evidence always overrides the marker.
+
+One retry, then escalate. Two identical failures in a row means the problem is systemic (prompt, environment, permissions) — further retries burn tokens without producing new information.
 
 ## Manual entry points
 
@@ -342,10 +418,13 @@ Target agent: <implementer|tester|architecter>
 Verdict from iteration <N>: FAIL
 
 ## Blocker issues
-<copy R-* rows from review.md tagged blocker>
+<copy R-* rows from review.md tagged blocker — including each row's Verify command>
 
 ## Major issues (address if cheap)
 <copy R-* rows tagged major>
+
+## Failing checks (inner fix loop only)
+<present only during §5 inner passes ≥2: the Verify commands that still failed last pass, with their output tails>
 
 ## Reviewer summary
 <paste the Summary paragraph from review.md>
@@ -365,8 +444,8 @@ When the loop ends, surface:
 
 - PASS / FAIL / BLOCKED status with the run-id
 - Iteration count used
-- Files changed (from `git diff --name-only` against the merge base or HEAD~N)
-- Coverage percentage
+- Files changed (from `git diff --name-only <base_ref>`)
+- Verified coverage percentage (from the evidence gate, not the tester's claim)
 - Pointer to `.dev-squad/runs/<run-id>/review.md` for full detail
 
 Keep this terminal output under 200 words. The detail is on disk.
@@ -386,6 +465,7 @@ Never auto-ingest. The user owns the wiki write boundary.
 ## Token discipline at the orchestrator level
 
 - Don't re-read state.json on every transition — read once at start, hold the structure in working memory, write back on each transition.
+- Evidence-gate re-runs reuse the exact commands the agents recorded; send output to disk and read only exit codes and the coverage report file — never paste full logs into context.
 - Don't pass full file contents to subagents. Pass file paths and let the subagent Read what it needs.
 - Don't paste subagent output into your own response back to the user — summarize from the artifact files instead.
 

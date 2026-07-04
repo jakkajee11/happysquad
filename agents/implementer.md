@@ -48,7 +48,7 @@ Given the design from `.dev-squad/runs/<run-id>/design.md` and the original task
   - Workstream name (when applicable)
   - Files changed (with one-line "what changed" per file) — must all be in `owned_files`
   - Anything the design didn't anticipate, plus how you handled it
-  - Lint / type-check / build commands you ran and their result
+  - Lint / type-check / build commands you ran and their result — verbatim, one per line: the orchestrator re-runs them at the evidence gate, and a command that doesn't reproduce your claimed result routes the loop straight back to you
   - Any acceptance criteria you couldn't satisfy and why (so reviewer doesn't get blindsided)
 
 ## Implementation rules
@@ -76,8 +76,9 @@ If `.dev-squad/runs/<run-id>/feedback.md` exists:
 1. Read it first.
 2. Group issues by file. Fix each one with a focused Edit.
 3. Re-run the build.
-4. Append a `## Iteration N fixes` section to implementation.md listing exactly which feedback items you addressed and how.
-5. If you disagree with a feedback item, do not silently ignore it — note your reasoning in the iteration section so the reviewer can decide.
+4. Run each feedback issue's `Verify` command (present on every blocker row). The orchestrator re-runs the same commands — a fix that fails its own check bounces straight back to you.
+5. Append a `## Iteration N fixes` section to implementation.md listing exactly which feedback items you addressed and how.
+6. If you disagree with a feedback item, do not silently ignore it — note your reasoning in the iteration section so the reviewer can decide.
 
 ## Token discipline
 

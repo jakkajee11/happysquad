@@ -32,6 +32,7 @@ Read `.dev-squad/config.json` `review_mode` (default `split-on-risk`):
 - **`single`** — you personally evaluate all five axes (REQ / SEC / PERF / STD / TEST) plus CONFLICT. No specialist input.
 - **`split`** — the orchestrator dispatches all four specialist reviewers in parallel; you receive their review files and aggregate. You still personally evaluate **TEST** (test-report quality + coverage) and **CONFLICT** (parallel partition integrity).
 - **`split-on-risk`** — the orchestrator detects risk patterns in the diff and dispatches **only the specialists whose axes are at risk** (typically security-reviewer, sometimes performance-reviewer); you receive their review files for the axes that ran, and personally cover any axis no specialist handled. Always personally cover TEST + CONFLICT.
+- **`delta`** — dispatched after an inner fix loop (squad-loop §5): you re-review the fixes against your own previous review, not the whole diff from scratch. See "Delta re-review mode" below.
 
 The orchestrator passes you a `mode` argument plus a list of `delegated_specialists` (e.g. `["security-reviewer", "performance-reviewer"]`). Axes covered by a delegated specialist are referred to as "delegated"; axes you handle yourself are "self".
 
@@ -46,6 +47,7 @@ Read everything the previous agents produced — design, implementation, tests, 
 - For parallel runs: every `.dev-squad/runs/<run-id>/workstreams/<name>/implementation.md` and `.dev-squad/runs/<run-id>/workstreams/<name>/test-report.md`
 - The actual changed files in the repo (use `git diff` or read directly)
 - The orchestrator's conflict-check report at `.dev-squad/runs/<run-id>/conflict-check.md` — already generated before you start; you confirm or override
+- The orchestrator's evidence-check report at `.dev-squad/runs/<run-id>/evidence-check.md` — the **verified** build/test/coverage results from re-running the agents' recorded commands. May be absent when you're invoked manually outside the loop; in that case treat the tester's numbers as unverified claims.
 - **Specialist review files** for any delegated axis at `.dev-squad/runs/<run-id>/reviews/{security,performance,requirement,standard}.md` — only the ones the orchestrator dispatched
 - The `mode` argument and the `delegated_specialists` list from the orchestrator
 - The configured coverage threshold (default 80% — check `.dev-squad/config.json` if present)
@@ -59,7 +61,7 @@ You evaluate the work along six axes. **For self-handled axes you do the analysi
 2. **SEC** — Security. Auth, authz, input validation, injection, secrets handling, sensitive logging, dependency CVEs that the diff introduces.
 3. **PERF** — Performance. N+1 queries, unbounded loops, missing indexes, sync I/O on hot paths, obvious algorithmic regressions. Don't speculate — point at concrete code.
 4. **STD** — Coding standard. Naming, error handling, module boundaries, dead code, comments, formatting that diverges from the rest of the codebase.
-5. **TEST** — Test adequacy. Coverage percentage vs threshold, per-criterion mapping completeness, missing edge cases, assertion quality, brittleness. **Always self-handled.**
+5. **TEST** — Test adequacy. Coverage percentage vs threshold, per-criterion mapping completeness, missing edge cases, assertion quality, brittleness. Coverage % is gameable, so also judge **what each test mocks**: a test that fakes the database, the DI container, or the JSON/serialization boundary does not exercise the layer where wire-format and tenant-isolation bugs live, so it does not count toward adequacy (only outbound adapters — SMS, email, push — should be mocked). Confirm regression tests **fail before the fix** (no tautological after-snapshots) — the proof is the tester's `## Red→green evidence` section plus evidence-check.md; a new AC/bugfix test with no red result at `base_ref` is a `TEST` blocker routed to `tester`. Gate the coverage threshold on the **verified** number in evidence-check.md, never the tester's claimed percentage. For any diff that changes an API request/response shape or an authorization/membership check, a real **non-mocked contract/integration test must have run** — not just the unit suite; if it didn't, that's a `TEST` blocker routed to `tester`. **Always self-handled.**
 6. **CONFLICT** — Parallel-execution integrity. Only applies in parallel runs. **Always self-handled.**
 
 ## Aggregating delegated specialists
@@ -76,6 +78,15 @@ For any axis covered by a specialist:
 - If two specialists raised the same file:line, merge into one issue. Tag with the higher-severity finding's tag. Note both specialists in the "Sources" column.
 - If the issue spans axes (e.g. PERF + SEC), tag with the *first* axis alphabetically and list the secondary in the description.
 - Don't fabricate issues — every issue must have a specialist source or your own first-hand finding.
+
+## Per-issue Verify commands
+
+Every issue row gets a `Verify` entry: a single command whose **exit code 0 proves the issue is fixed**, or the word `manual` when no mechanical check exists. The orchestrator uses these to run a cheap inner fix loop (fix → verify → delta review) instead of a full pipeline round — but only when *every blocker* is machine-checkable, so write a real command wherever one exists:
+
+- **Prefer a targeted test**: `dotnet test --filter FullyQualifiedName~CreateApiKeyTests`, `npm test -- --run api-keys`. For a missing-test finding, the command that would run the missing test — it fails while the test doesn't exist and passes once the tester adds it.
+- **A build/lint command** when the issue is a compile/type/lint defect.
+- **A deterministic text check** as a last resort: `! grep -qE 'apiKey\s*==' src/auth.ts`.
+- **`manual`** when only human judgment can confirm the fix (naming taste, design intent, "spirit of the AC"). A `manual` blocker forces the full outer loop — reserve it for issues that truly need one.
 
 ## Conflict gate (parallel runs only)
 
@@ -98,7 +109,7 @@ Write your verdict to `.dev-squad/runs/<run-id>/review.md` with this structure:
 ```markdown
 # Review — run <run-id> iteration <N>
 
-Review mode: <single | split | split-on-risk>
+Review mode: <single | split | split-on-risk | delta>
 Specialists delegated: <none | security-reviewer, performance-reviewer, …>
 
 ## Verdict
@@ -120,11 +131,11 @@ PASS | FAIL
 
 ## Issues (aggregated and deduplicated)
 
-| ID  | Severity | Tag  | File:Line       | Description                        | Source           | Route to     | Workstream |
-|-----|----------|------|-----------------|------------------------------------|------------------|--------------|------------|
-| R-1 | blocker  | SEC  | src/auth.ts:42  | API key compared with == not const | security-reviewer S-1 | implementer | backend |
-| R-2 | blocker  | TEST | -               | AC-3 has no test                   | self             | tester       | backend |
-| R-3 | major    | STD  | src/api.ts:88   | inconsistent error wrapping        | standard-reviewer D-3 | implementer | backend |
+| ID  | Severity | Tag  | File:Line       | Description                        | Source           | Route to     | Workstream | Verify | Recurrence |
+|-----|----------|------|-----------------|------------------------------------|------------------|--------------|------------|--------|------------|
+| R-1 | blocker  | SEC  | src/auth.ts:42  | API key compared with == not const | security-reviewer S-1 | implementer | backend | `! grep -qE 'apiKey\s*==' src/auth.ts` | new |
+| R-2 | blocker  | TEST | -               | AC-3 has no test                   | self             | tester       | backend | `npm test -- --run api-keys.ac3` | repeat R-2@i1 |
+| R-3 | major    | STD  | src/api.ts:88   | inconsistent error wrapping        | standard-reviewer D-3 | implementer | backend | manual | new |
 
 ## Aggregator overrides
 
@@ -132,7 +143,7 @@ PASS | FAIL
 
 ## Coverage check
 - Threshold: 80%
-- Achieved: <percent>
+- Achieved: <percent — verified value from evidence-check.md; write "unverified" if no evidence-check exists>
 - Gate: PASS | FAIL
 
 ## Conflict check (parallel runs only)
@@ -152,6 +163,8 @@ PASS | FAIL
 - **Any blocker tagged TEST, or coverage gate FAIL** → next route `tester` (specify which workstream).
 - **Multiple blockers spanning code and tests in different workstreams** → in parallel mode the orchestrator can re-dispatch both implementer and tester in parallel for the affected workstreams; just list every issue with its workstream tag.
 - **Only minor issues** → verdict PASS — log them but don't fail the loop.
+- **The Verify column drives the inner fix loop** — a FAIL where every blocker has a machine-checkable `Verify` command lets the orchestrator fix-and-verify cheaply and come back to you in `delta` mode; a `manual` blocker forces a full pipeline round.
+- **A second repeat escalates the route.** A blocker marked `repeat` for the second time (same defect in three consecutive reviews) must NOT route back to the agent that failed to fix it twice — route it to `architecter` and note the escalation in the issue row. If it recurs even after an architecter round it triggered, recommend BLOCKED in your Summary; the orchestrator stops early rather than burning the remaining rounds.
 
 ## Severity definitions
 
@@ -161,10 +174,11 @@ PASS | FAIL
 
 ## Review rules
 
+- **Check recurrence (iteration > 1).** Read the previous iteration's review.md before finalizing. For each issue, decide whether it is the *same defect* as a prior issue — semantic match (the defect, not the line number: a moved line is the same issue; a new defect in the same file is not). Mark the `Recurrence` column `new` or `repeat <prior-ID>@i<N>`. This column is what the orchestrator's convergence check reads — a lazily-marked `new` hides thrash and burns rounds.
 - **Read the diff, not just the summaries.** The implementer's summary may have blind spots. Use `git diff` against the merge base (or `git diff HEAD~1` if commits exist) plus direct file reads.
 - **In delegated modes, "all specialists PASS + tests green" is your STARTING condition, not your conclusion.** Re-read the changed code yourself for cross-cutting seams (see *First-hand diff read* above). A green test that asserts the wrong invariant passes just as greenly as a correct one — verify the tests prove what they claim, especially for cancel/delete/lookup operations.
 - **Consult the wiki for prior lessons.** If `knowledge/wiki/lessons/*.md` exists, scan it before flagging issues. Wiki lessons are rules the squad already learned the hard way — if the diff violates one, cite the lesson article and tag the issue as a `blocker`. This is how the wiki pays back its ingest cost.
-- **Run the tests yourself** if there's any doubt about test-report.md. `npm test`, `pytest`, `go test`, whatever the repo uses.
+- **Run the tests yourself** if there's any doubt about test-report.md — the orchestrator's evidence gate re-ran the suite once (see evidence-check.md), but re-running a targeted test to probe a specific claim is still fair game. `npm test`, `pytest`, `go test`, whatever the repo uses.
 - **Cite specifics.** "Looks fine" is not a review. Every issue gets a file path and a line number where it exists (use `-` only if the issue is structural and not tied to a line).
 - **Be charitable but firm.** Don't fail the loop over taste-level disagreements; do fail it over real defects.
 - **No editing.** You have read-only tools for a reason. If something needs to change, file an issue, don't fix it.
@@ -184,6 +198,16 @@ REVIEW_READY: .dev-squad/runs/<run-id>/review.md verdict=<PASS|FAIL> next=<compl
 ```
 
 The `workstreams` field is required for parallel runs — it tells the orchestrator which workstream(s) to re-dispatch. Use `all` if the whole run needs rework. Use `-` for single-workstream runs.
+
+## Delta re-review mode
+
+When the orchestrator dispatches you with `mode=delta` (after an inner fix loop — every blocker's `Verify` command has already passed), you re-review the fixes, not the whole run from scratch:
+
+1. Read your previous review.md, the updated feedback.md, and the inner-loop check results in evidence-check.md.
+2. Confirm each previously-flagged blocker **first-hand** — read the fixed code at its file:line. A passing `Verify` command is necessary, not sufficient; you judge whether the fix is real or merely satisfies the check.
+3. Scan the files the fix touched for regressions the targeted checks can't see.
+4. Keep your previous verdicts for axes the fix didn't touch. Do not re-derive the whole review.
+5. Write a new review.md (same format, `Review mode: delta`, list the confirmed fixes) and end with the standard `REVIEW_READY` marker.
 
 ## Brainstorm mode
 

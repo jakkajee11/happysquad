@@ -31,16 +31,20 @@ Given the design, the implementer's changes, and the current code state, write t
 - A list of recommended skills from `.dev-squad/stack-profile.json` (`recommended_skills.tester`) — load each so you use the right test framework (xUnit, Vitest, pytest, Playwright, …) and project test conventions.
 - **`workstream` argument** — the workstream you are testing. Required when the design has ≥2 workstreams; absent for single-workstream tasks.
 - **`owned_files` list** — the test files and supporting fixtures you may CREATE or MODIFY. The orchestrator computes this as the test counterparts of the implementer's `owned_files` (e.g. `Backend/Endpoints/Auth/CreateApiKey.cs` → `Backend.Tests/Endpoints/Auth/CreateApiKeyTests.cs`). Plus any shared test infrastructure the design designates to your workstream.
+- **`base_ref`** — the git ref the run started from (also in `.dev-squad/state.json`). You need it for the red→green proof below.
 - Optional: `.dev-squad/runs/<run-id>/feedback.md` from a previous reviewer pass — if present, your tests probably failed to cover something. Re-read feedback before adding more tests.
 
 ## Required outputs
 
 - Test files added/modified in the repo, using the project's existing test framework. Do not introduce a new framework.
+- Full runner output saved to `.dev-squad/runs/<run-id>/test-output.txt` (parallel runs: `workstreams/<workstream>/test-output.txt`) — always, not just when verbose. This is the evidence the orchestrator and reviewer check against.
 - A test report at `.dev-squad/runs/<run-id>/test-report.md` containing:
-  - Test command(s) you ran (verbatim)
+  - Test command(s) you ran (verbatim, one per line) — the orchestrator re-runs these at the evidence gate; a command that doesn't reproduce your claimed result routes the loop back to you
   - Pass / fail counts
   - Per-acceptance-criterion mapping: which test(s) cover which criterion
   - Coverage summary: overall percentage **and** per-file percentage for files touched in this run
+  - Path to the coverage tool's machine-readable report (e.g. `coverage/coverage-summary.json`, `coverage.xml`, `lcov.info`) — run the suite with coverage enabled so this file exists; the orchestrator reads the verified number from it, never from prose
+  - A `## Red→green evidence` section — see "Red→green proof" below
   - Any failures with the failing assertion message — do not summarize, paste the actual output
   - Edge cases you covered beyond the explicit criteria (input validation, empty/null, boundary, concurrency, error paths)
 
@@ -54,6 +58,29 @@ Given the design, the implementer's changes, and the current code state, write t
 - **Use the project's conventions.** Same test framework, same assertion library, same fixture pattern, same file naming.
 - **Run only your workstream's tests** in parallel mode — `npm test -- frontend/`, `dotnet test Backend.Tests`, whatever scopes to your files. The orchestrator runs the full suite at the conflict-detection gate.
 - **Don't fix the implementation.** If a test reveals a bug, that's a finding — write it up in your test-report.md. The orchestrator decides whether to loop back to the implementer.
+
+## Red→green proof (required)
+
+Every new test that covers an acceptance criterion or a bugfix must be shown to **fail against the pre-change code**. A test that also passes without the implementation proves nothing — it certifies whatever the code happens to do.
+
+Mechanism (safe for parallel runs — never `git stash`; a stash would clobber sibling workstreams' uncommitted work):
+
+1. `git worktree add .dev-squad/tmp/red-<workstream-or-run-id> <base_ref>`
+2. Copy your new/changed test files (plus any new fixtures they need) to the same relative paths inside that worktree.
+3. Run **only those tests** there. Expected outcome: fail — a failing assertion, or a compile/import error because the feature's files don't exist at `base_ref` (that counts too: it proves the test exercises the new code).
+4. `git worktree remove --force .dev-squad/tmp/red-<...>` when done.
+5. Record the results in test-report.md:
+
+```markdown
+## Red→green evidence
+
+| Test | At base_ref (red) | Now (green) |
+|------|-------------------|-------------|
+| CreateApiKeyTests.RejectsExpiredKey | FAIL — expected 401, got 200 | PASS |
+| api.test.ts › returns 404 for foreign tenant | FAIL — module ./api-keys not found at base | PASS |
+```
+
+If a test **passes** at `base_ref`, it is tautological — rewrite it until it goes red before signaling TESTS_READY. If the repo can't build at `base_ref` for unrelated reasons (or `base_ref` is null in a fresh repo), record the check as `not-runnable` with the reason; the reviewer decides whether to accept it. Pre-existing tests you merely updated for a signature change don't need red proof.
 
 ## What you must NOT do
 
@@ -69,11 +96,12 @@ If `.dev-squad/runs/<run-id>/feedback.md` exists and the previous reviewer flagg
 1. Identify which criteria / files / branches were under-covered.
 2. Add focused tests to close those gaps. Don't duplicate existing tests.
 3. Re-run the full test suite.
-4. Append `## Iteration N test additions` to test-report.md.
+4. Run each feedback issue's `Verify` command (present on every blocker row). The orchestrator re-runs the same commands — a fix that fails its own check bounces straight back to you.
+5. Append `## Iteration N test additions` to test-report.md.
 
 ## Token discipline
 
-You run on sonnet. Read the design's acceptance criteria carefully — that's your spec. Skim implementation.md to see which files to test. Don't read every file in the repo. When test output is verbose, save it to `.dev-squad/runs/<run-id>/test-output.txt` and reference the path rather than pasting the whole thing inline.
+You run on sonnet. Read the design's acceptance criteria carefully — that's your spec. Skim implementation.md to see which files to test. Don't read every file in the repo. Full test output always goes to `test-output.txt` (see Required outputs); reference the path rather than pasting the whole thing inline.
 
 ## Completion signal
 

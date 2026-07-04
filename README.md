@@ -175,9 +175,16 @@ Iteration > cap (default 5) ─▶ BLOCKED with a structured report.
 
 The reviewer is the only agent that fails the loop. Its verdict + `next` field decide where the next iteration goes.
 
+**Evidence-based gates.** Completion markers are claims, not facts. Before every transition out of an implement/test state the orchestrator re-runs the implementer's build commands and the tester's test commands itself, reads coverage from the coverage tool's report file (never from prose), and requires **red→green proof** — every new AC/bugfix test must be shown to fail at the run's `base_ref` (via a throwaway worktree) before it counts. Verified values land in `evidence-check.md` and `state.json`; a claim that doesn't reproduce routes the loop back to the claiming agent.
+
+**Inner fix loop.** Every review issue carries a `Verify` command (exit code 0 = fixed; `manual` when only judgment can confirm). When a FAIL routes to implementer/tester and every blocker is machine-checkable, the orchestrator skips the full pipeline round: fix agent → run the per-finding checks (up to `inner_cap`, default 2 passes) → evidence gate → a **delta review** that confirms the fixes first-hand instead of re-deriving everything. A single `manual` blocker falls back to the full round.
+
+**Convergence detection.** The reviewer marks every issue `new` or `repeat` against its previous review. A blocker that survives two fix rounds escalates to the architecter instead of bouncing back a third time; a blocker that recurs after a redesign — or two consecutive rounds with zero resolved blockers — stops the loop as BLOCKED early, with a convergence analysis (rounds seen, routes tried) ready to become a wiki lesson. The round cap is the backstop, not the detector.
+
 ## Defaults
 
 - **Round cap:** 5
+- **Inner fix-loop cap:** 2 verify-checked fix passes per review round
 - **Coverage threshold:** 80%
 - **Models:** opus for architecter/reviewer, sonnet for implementer/tester
 
@@ -186,6 +193,7 @@ Override in `.dev-squad/config.json` at the repo root:
 ```json
 {
   "cap": 10,
+  "inner_cap": 2,
   "coverage_threshold": 85,
   "models": {
     "architecter": "opus",
@@ -242,10 +250,12 @@ The wiki is plain markdown with relative links. Point an [Obsidian](https://obsi
 │       ├── design.md                    # from architecter (incl. Workstreams + Ownership map)
 │       ├── implementation.md            # from implementer (single-workstream runs)
 │       ├── test-report.md               # from tester (single-workstream runs)
+│       ├── test-output.txt              # full runner output (evidence; per-workstream in parallel runs)
 │       ├── workstreams/<name>/          # per-workstream artifacts (parallel runs)
 │       │   ├── implementation.md
 │       │   ├── test-report.md
 │       │   └── ownership-gap.md         # only if an agent hit a gap
+│       ├── evidence-check.md            # orchestrator's verified build/test/coverage results (evidence gate)
 │       ├── conflict-check.md            # written by orchestrator before review (parallel runs)
 │       ├── review.md                    # from reviewer (includes conflict-gate verdict)
 │       ├── feedback.md                  # written by orchestrator between iterations
@@ -275,7 +285,7 @@ Agents do **not** chat. They communicate through artifact files:
 - `tester` writes tests + `test-report.md` → `reviewer` reads everything.
 - `reviewer` writes `review.md` with a routing decision → orchestrator extracts blocker/major issues into `feedback.md` for the next iteration.
 
-Each agent ends with a completion marker line (`DESIGN_READY: …`, `IMPLEMENTATION_READY: …`, `TESTS_READY: …`, `REVIEW_READY: …`) that the orchestrator uses as the hand-off signal.
+Each agent ends with a completion marker line (`DESIGN_READY: …`, `IMPLEMENTATION_READY: …`, `TESTS_READY: …`, `REVIEW_READY: …`) that the orchestrator uses as the hand-off signal. Markers are treated as claims: the orchestrator verifies them at the evidence gate (re-running recorded commands, reading the coverage report file) before transitioning.
 
 ## Token efficiency
 

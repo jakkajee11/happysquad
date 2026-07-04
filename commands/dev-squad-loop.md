@@ -17,9 +17,10 @@ Concretely:
 6. Step through the state machine. After ARCHITECT, parse the marker `DESIGN_READY: … workstreams=N parallel=<bool>`:
    - If `parallel=true` AND `--no-parallel` was not passed → enter `PARALLEL_IMPLEMENT`. Build the DAG, dispatch wave-by-wave in single multi-Agent-tool messages.
    - Otherwise → enter linear `IMPLEMENT`.
-7. After each implementation phase, run the corresponding TEST phase (parallel or single, same shape).
+7. After each implementation phase, run the evidence gate per the skill's "Evidence gate" section (re-run the implementer's recorded build commands; on mismatch → feedback + re-dispatch), then run the corresponding TEST phase (parallel or single, same shape), then its evidence gate (re-run the test commands, read coverage from the coverage tool's report file, confirm the `## Red→green evidence` section exists).
 8. Run `CONFLICT_GATE` (no-op for single-workstream runs; full check for parallel).
-9. Dispatch `reviewer`. Honor its `next` field per the routing rules — for parallel runs, also honor `workstreams=<list>` for subset re-dispatch.
-10. Stop on COMPLETE, BLOCKED, or when iteration > cap. Never silently retry past the cap.
+9. Dispatch `reviewer`. Honor its `next` field per the routing rules — for parallel runs, also honor `workstreams=<list>` for subset re-dispatch. On a FAIL routed to implementer/tester where every blocker has a machine-checkable `Verify` command, take the inner fix loop per the skill's "Inner fix loop" section (fix → run per-finding Verify checks → evidence gate → delta review) instead of a full pipeline round.
+10. Run the skill's convergence check on every FAIL before routing (Recurrence column: second repeat → escalate route to architecter; repeat after redesign or two zero-progress rounds → early BLOCKED).
+11. Stop on COMPLETE, BLOCKED (cap or convergence), or when iteration > cap. Never silently retry past the cap.
 
 After the loop ends, surface the wiki ingest offer per the skill's "Wiki offer" section. Keep the closing report under 200 words.
