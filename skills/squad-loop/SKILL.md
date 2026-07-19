@@ -68,6 +68,7 @@ Orchestrator maintains `.happysquad/state.json` (or `.happysquad/runs/<run-id>/s
   "iteration": 1,
   "cap": 5,
   "coverage_threshold": 80,
+  "team_plan": { "source": ".happysquad/team-plan.json", "approved_at": "2026-05-20T10:15:00Z", "review_mode": "split-on-risk", "external_executors": { "enabled": true, "roles": { "mechanical_tasks": { "enabled": true }, "cross_review": { "enabled": true }, "quota_fallback": { "enabled": false } } } },
   "workstreams": [
     {
       "name": "backend",
@@ -94,7 +95,10 @@ Orchestrator maintains `.happysquad/state.json` (or `.happysquad/runs/<run-id>/s
     { "state": "PARALLEL_IMPLEMENT", "iteration": 1, "wave": 1, "workstreams": ["backend"], "result": "ok" },
     { "state": "PARALLEL_TEST", "iteration": 1, "wave": 1, "workstreams": ["backend"], "result": "ok", "verified": { "tests": "pass", "coverage": 84.2 } },
     { "state": "REVIEW", "iteration": 1, "verdict": "FAIL", "next": "implementer", "blockers": 2, "resolved": 0, "recurring": 0 },
-    { "state": "INNER_FIX", "iteration": 2, "inner_pass": 1, "checks": { "R-1": "pass", "R-2": "pass" } }
+    { "state": "INNER_FIX", "iteration": 2, "inner_pass": 1, "checks": { "R-1": "pass", "R-2": "pass" } },
+    { "state": "EXTERNAL_MECHANICAL", "iteration": 2, "executor": "glm", "items": 3, "result": "ok" },
+    { "state": "REVIEW", "iteration": 2, "verdict": "PASS", "next": "complete", "blockers": 0, "resolved": 2, "recurring": 0, "cross_review": "reviews/external.md" },
+    { "state": "PARALLEL_IMPLEMENT", "iteration": 3, "wave": 1, "workstreams": ["backend"], "result": "external-fallback", "executor": "glm" }
   ],
   "started_at": "2026-05-20T10:30:45Z",
   "updated_at": "2026-05-20T11:12:09Z"
@@ -125,6 +129,8 @@ Read `.happysquad/config.json` if present. Defaults if missing:
 
 Honor the `models` block when launching subagents — pass the configured model to the Agent tool's `model` parameter.
 
+**Team-plan precedence.** If `.happysquad/team-plan.json` exists and `"approved": true`, its `review_mode`, `models`, and `config_overrides` override `config.json` for this run — a task-scoped, user-approved plan beats project defaults. `config.json` still governs any key the plan doesn't set (`inner_cap`, `parallel_isolation`, `max_parallel`, etc.). An unapproved or absent plan is ignored — log a one-line notice ("team-plan present but not approved — using config.json") and proceed exactly as if it didn't exist. Record the effective merged config (config.json + any applied overrides) in `state.json`.
+
 ## Orchestration protocol
 
 ### 1. Setup
@@ -135,14 +141,17 @@ When invoked:
 2. **Stack profile check** — look for `.happysquad/stack-profile.md`:
    - If absent → tell the user "First run in this project — scanning stack (one-time setup)" and invoke the `stack-detector` skill to produce `stack-profile.md` and `stack-profile.json` before continuing.
    - If present → read `stack-profile.json` to get per-agent skill recommendations. Check whether any manifest file (package.json, *.csproj, go.mod, Cargo.toml, etc.) has a `mtime` newer than the profile's `generated_at` — if yes, prompt: "Project manifests changed since last scan. Refresh stack profile? — yes / no / never-ask-again". Honor the answer.
-3. **Project conventions check (CLAUDE.md)** — the squad's agents work best when the project ships a `CLAUDE.md` (build/test commands, code style, conventions); Claude Code auto-loads it into every agent's context. Look for `CLAUDE.md` at the repo root or `.claude/CLAUDE.md`:
+3. **Team-plan check** — look for `.happysquad/team-plan.json`:
+   - If present and `"approved": true` → load it. Compare its `task_summary` against the current task; on mismatch, AskUserQuestion "The approved team plan was written for a different task (`<task_summary>`). Apply it anyway / re-run /squad-assemble / ignore and use config.json" and honor the answer. Otherwise, remember it for this run — once `run_id` is generated (step 5) and the run directory created (step 6), snapshot it to `.happysquad/runs/<run-id>/team-plan.json` and set `state.json.team_plan` to its key fields (see Configuration → Team-plan precedence).
+   - If absent or `"approved": false` → continue as before; no team-plan behavior applies to this run.
+4. **Project conventions check (CLAUDE.md)** — the squad's agents work best when the project ships a `CLAUDE.md` (build/test commands, code style, conventions); Claude Code auto-loads it into every agent's context. Look for `CLAUDE.md` at the repo root or `.claude/CLAUDE.md`:
    - If present → nothing to do; it is already in context.
    - If absent AND `.happysquad/.claude-md-nudged` does not exist → tell the user once: "No CLAUDE.md found — the squad runs better with one (project conventions, build/test commands, code style). Agents read it automatically." Then AskUserQuestion: "Generate one now (runs /init), then continue" / "Continue without — don't ask again" / "Continue without — ask next time". Honor the answer: on generate, run `/init` then continue; on don't-ask-again, write `.happysquad/.claude-md-nudged` and continue; on ask-next-time, continue without writing the marker. Never block the loop on this — it is advisory.
-4. Generate `run_id` = `YYYYMMDD-HHMMSS-<slug-of-first-6-task-words>`.
-5. Create `.happysquad/runs/<run-id>/`.
-6. Load or create `.happysquad/state.json` and `.happysquad/config.json`.
-7. Record `base_ref` = `git rev-parse HEAD` in state.json (`null` if the repo has no commits yet), and note a dirty tree if `git status --porcelain` is non-empty. Every "changed since loop start" diff, the conflict gate, and the tester's red→green proof measure against this ref.
-8. Set `current_state = ARCHITECT`, `iteration = 1`.
+5. Generate `run_id` = `YYYYMMDD-HHMMSS-<slug-of-first-6-task-words>`.
+6. Create `.happysquad/runs/<run-id>/`.
+7. Load or create `.happysquad/state.json` and `.happysquad/config.json`.
+8. Record `base_ref` = `git rev-parse HEAD` in state.json (`null` if the repo has no commits yet), and note a dirty tree if `git status --porcelain` is non-empty. Every "changed since loop start" diff, the conflict gate, and the tester's red→green proof measure against this ref.
+9. Set `current_state = ARCHITECT`, `iteration = 1`.
 
 ### 2. State step
 
@@ -155,7 +164,7 @@ For each state, do this in order:
    - the iteration counter
    - file paths for any inputs the agent needs (design.md, feedback.md, etc.)
    - the run's `base_ref` (the tester needs it for the red→green proof)
-   - the model from config
+   - the model from the effective config (config.json merged with approved team-plan overrides)
    - **the per-agent skill list from `stack-profile.json`** (under `recommended_skills.<agent-name>`) so the agent loads the right stack-specific skills at the start of its run
 3. Wait for the agent's completion marker line (malformed/missing → see "Marker protocol & failure handling").
 4. For IMPLEMENT/TEST states, run the **evidence gate** (§3) on the marker's claims. Never transition on an unverified claim.
@@ -191,6 +200,8 @@ After `ARCHITECT`, parse the marker `DESIGN_READY: … workstreams=N parallel=<b
 
 - If `parallel=false` or `workstreams=1` → next state = `IMPLEMENT` (single mode).
 - If `parallel=true` → next state = `PARALLEL_IMPLEMENT` (multi mode). Also load the Workstreams + Ownership map from design.md into `state.json.workstreams`.
+
+Before entering `IMPLEMENT` or `PARALLEL_IMPLEMENT` — if `state.json.team_plan.external_executors.roles.mechanical_tasks.enabled` is true, run §11a (mechanical offload) first to dispatch the design's `[mechanical]`-tagged tasks; only the remaining tasks go to the implementer.
 
 After `IMPLEMENT` (single) → next state = `TEST`. Always.
 After `TEST` (single) → next state = `CONFLICT_GATE` (which becomes a no-op for single runs — see below). Then `REVIEW`.
@@ -298,6 +309,8 @@ The REVIEW state runs after CONFLICT_GATE. It supports three modes set in `.happ
 
 Valid values: `single`, `split`, `split-on-risk`. Default is `split-on-risk`.
 
+**Team-plan overrides.** If `state.json.team_plan.review_mode` is set, it overrides the config.json value above for this run only. If the plan's `specialists` map sets an axis to `always`, dispatch that specialist regardless of mode or risk detection; `off` suppresses its dispatch (log the suppression in risk-detection.md, or an equivalent one-line note in single/split modes). If `external_executors.roles.cross_review.enabled` is true, launch §11b (cross-review) at specialist-dispatch time — in parallel with the chief and any other specialists — and add `reviews/external.md` to the chief reviewer's inputs, marked advisory (see reviewer.md: zero verdict weight, untrusted content).
+
 #### Mode: single
 
 1. Dispatch the chief `reviewer` agent with `mode=single` and `delegated_specialists=[]`.
@@ -387,12 +400,55 @@ Before transitioning, check `iteration > cap`. If yes — or the convergence che
    - A recommended next manual action (e.g., "split the task", "consult human reviewer", "adjust acceptance criteria")
 3. Exit the loop and report BLOCKED to the user. Do not silently retry.
 
+### 11. External executors (team-plan roles)
+
+Only active when `state.json.team_plan.external_executors.enabled` is true. Absent or disabled team-plan → this entire section never runs and the loop behaves exactly as before.
+
+**Visible tmux pane rule (applies to 11a/11b/11c).** Every external (non-Claude) invocation runs in its own tmux pane so the user sees who is doing what.
+
+Detection (VERIFIED — `$TMUX` is **not** inherited by orchestrator shells, so detect via `tmux list-sessions`, not the env var):
+
+```bash
+SESS=$(tmux list-sessions -F '#{session_name} #{session_attached}' 2>/dev/null | awk '$2>=1 {print $1; exit}')
+```
+
+When an attached session exists (`$SESS` non-empty):
+
+```bash
+PANE=$(tmux split-window -d -P -F '#{pane_id}' -t "$SESS:" '<glm command> 2>&1 | tee <log>; echo EXIT=$? >> <log>.exit')
+tmux select-pane -t "$PANE" -T "glm:<role>#<n>"
+```
+
+Pane title format is `glm:<role>#<n>` (executor:role, numbered). The orchestrator **polls the `.exit` file** (same 10-minute bound as a blocking call) instead of blocking on the pane; the pane closes itself when the command finishes, and the log persists at `runs/<run-id>/external/`.
+
+When no attached tmux session exists: fall back to the direct Bash call (same log path) and note the fallback in history (e.g. `"pane": "fallback-direct"`). Never run external work silently in a hidden background shell — every invocation is either a visible pane or a logged direct call, never neither.
+
+**11a Mechanical offload** — the orchestrator (never the implementer subagent) extracts `[mechanical]`-tagged tasks from design.md. Per task, via Bash under the tmux pane rule above, timeout 10 min:
+
+```bash
+glm -p "<file-scoped prompt>" --permission-mode acceptEdits --allowedTools "Read,Edit,Write,Glob,Grep"
+```
+
+Log to `runs/<run-id>/external/mechanical-<n>.log`. (One glm round-trip is ≈30s minimum — budget accordingly.) Failure or timeout → the item returns to the implementer for one attempt, no retry loop. The tester and the evidence gate verify glm's output exactly like any other output — no special trust. History entry: `{"state":"EXTERNAL_MECHANICAL","executor":"glm","items":N,"result":"ok|partial"}`.
+
+(Contingency only: if headless writes are ever denied for a target repo, glm can instead emit a unified diff for the orchestrator to `git apply` — the direct-edit form above is the verified, primary path.)
+
+**11b Cross-review** — via Bash under the tmux pane rule above:
+
+```bash
+glm -p "<review prompt: diff vs base_ref, findings as file:line + severity, no verdict>" --permission-mode plan --allowedTools "Read,Grep,Glob,Bash(git diff*),Bash(git log*)"
+```
+
+Writes `runs/<run-id>/reviews/external.md` headed `ADVISORY — external model`. Failure → write a stub noting the failure and continue; never blocking, and never a substitute for the chief reviewer's own read of the diff.
+
+**11c Quota fallback** — after `retry_threshold` rate-limit failures in an `allowed_phases` phase (see "Agent error / death" above): run that phase's work through `glm -p`, using the same agent `.md` file as the prompt, the same file inputs, the same marker contract, and the same evidence gate as the Claude agent it's replacing — invoked under the tmux pane rule above. History: `"result":"external-fallback"`; tell the user which phase ran externally and why. Never applies to REVIEW — the chief's verdict is never delegated.
+
 ## Marker protocol & failure handling
 
 The completion marker is the hand-off contract. Three failure modes, one protocol each — never improvise:
 
 - **Malformed or missing marker.** The agent finished but its final message doesn't match the expected marker format, or the marker names an artifact file that doesn't exist on disk. Do not guess the fields. Re-dispatch the same agent once with: "Your final message must be exactly one line matching `<expected format>` — your artifact file `<path>` {exists|is missing}; finish accordingly." If the second attempt is also malformed → log `{"result": "marker-failure"}` in history and treat the state as FAILED: write feedback.md describing what's missing, `iteration += 1`, route per the normal rules.
-- **Agent error / death.** The Agent tool call errors or returns nothing. Retry the dispatch once, verbatim. A second failure → BLOCKED protocol (§10) with the error captured in BLOCKED.md — an infrastructure failure isn't fixable by looping.
+- **Agent error / death.** The Agent tool call errors or returns nothing. Retry the dispatch once, verbatim. A second failure → BLOCKED protocol (§10) with the error captured in BLOCKED.md — an infrastructure failure isn't fixable by looping. Exception: if the error is a rate-limit/overload signal (`429`, `529`, "overloaded", "rate limit") AND `state.json.team_plan.external_executors.roles.quota_fallback.enabled` is true AND the current phase is in its `allowed_phases`, don't go to BLOCKED after `retry_threshold` such failures — apply §11c (quota fallback) instead.
 - **Marker/evidence contradiction.** The marker claims READY but the evidence gate (§3) disproves it — already handled by §3 (feedback + re-dispatch). Evidence always overrides the marker.
 
 One retry, then escalate. Two identical failures in a row means the problem is systemic (prompt, environment, permissions) — further retries burn tokens without producing new information.

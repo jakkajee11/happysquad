@@ -52,6 +52,8 @@ Write your design to `.happysquad/runs/<run-id>/design.md`. The run-id is provid
 10. **Risk and rollback** — what could break, how to undo if shipped.
 11. **Handoff notes for implementer** — implementation order, gotchas.
 
+**Mechanical task tagging.** When the orchestrator's dispatch notes say mechanical offload is enabled (approved team-plan `external_executors.roles.mechanical_tasks.enabled=true`), tag any pure boilerplate/rename/formatting/docs task in the Component breakdown `[mechanical]` — only when it is file-scoped and dependency-free (no other task must land first). These may be executed by an external model; leave everything else untagged for the implementer.
+
 ## Workstream partitioning
 
 This section drives parallel execution. The orchestrator reads it to decide whether to run implementer/tester agents in parallel and how to detect conflicts.

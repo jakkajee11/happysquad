@@ -6,7 +6,7 @@ Report a concise status of any active happysquad work — stack profile, dev-loo
 
 Steps:
 
-1. Look for `.happysquad/stack-profile.md`, `.happysquad/state.json` (dev-loop runs), any `.happysquad/brainstorms/*/session.json` (brainstorm sessions), and any `.happysquad/fleets/*/fleet.json` (fleet runs).
+1. Look for `.happysquad/stack-profile.md`, `.happysquad/state.json` (dev-loop runs), any `.happysquad/brainstorms/*/session.json` (brainstorm sessions), any `.happysquad/fleets/*/fleet.json` (fleet runs), and `.happysquad/team-plan.json` (team-assembly plan). If `team-plan.json` exists, report a one-line callout near the top: its `approved` flag and, when approved, `approved_at` (e.g. "Team plan: approved" / "Team plan: pending approval — run /squad-assemble to review").
 2. If none exist, say "No happysquad activity on record. Start with /squad-detect to scan the stack, or /brainstorm / /happysquad-loop / /squad-fleet." Stop.
    If in-progress work exists in any mode, mention at the top: "Resume any of these with /squad-resume." (State persists across sessions — closing and reopening does not lose progress.)
 3. **Stack section** (only if `stack-profile.md` exists):

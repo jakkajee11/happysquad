@@ -38,6 +38,7 @@ Model assignment uses the **Balanced** strategy — heavier reasoning (product j
 | Command            | Description                                                                       |
 |--------------------|-----------------------------------------------------------------------------------|
 | `/brainstorm`      | Run a 3-round session where all five agents analyze a topic together. **Use when the path is unclear.** |
+| `/squad-assemble`  | Analyze a spec and recommend team composition (review mode, specialists, models, external-executor roles) behind an approval gate. Optional pre-loop step. |
 | `/happysquad-loop`  | Run the full architect → implement → test → review loop until PASS or cap. **Use when the path is clear.** |
 | `/architect`       | Run only the architecter — produce a design, stop.                                |
 | `/implement`       | Run only the implementer against the current run's design.                        |
@@ -131,6 +132,18 @@ You can also run `/squad-detect` manually to refresh the profile after upgrading
 The profile is read-only with respect to the project — it never writes to your source code. It only reads manifests, configs, and a small sample of source files.
 
 Alongside the stack scan, setup also checks for a `CLAUDE.md` (repo root or `.claude/CLAUDE.md`). Claude Code auto-loads it into every agent's context, so a project that documents its build/test commands, code style, and conventions there gives the squad a sharper starting point. If none exists, the first `/happysquad-loop` or `/brainstorm` nudges you once — generate one via `/init`, skip permanently, or skip for now. It's advisory and never blocks the loop; a permanent skip is remembered in `.happysquad/.claude-md-nudged`.
+
+## Team assembly
+
+`/squad-assemble <spec file or requirement text>` analyzes a spec before any code is touched and recommends how to run the loop: review mode, which specialists to force on/off, per-agent models, and whether to enable external-executor roles. It writes `.happysquad/team-plan.json` (machine-readable) + `.happysquad/team-plan.md` (rationale), shows a summary, then asks you to **Approve / Edit / Reject** — nothing takes effect until you approve it.
+
+Claude agents remain the primary team. External executors (`glm`, canonical; `opencode run`, alternate — both hit the same backend) are limited to exactly three roles, never parallel co-implementers:
+
+- **Mechanical offload** — cheap boilerplate/rename/formatting/docs tasks the architecter tagged `[mechanical]`.
+- **Advisory cross-review** — a second-opinion diff review written to `reviews/external.md`; the chief reviewer treats it as an untrusted hint with zero verdict weight, never a vote.
+- **Quota fallback** — runs a phase through the external model after repeated rate-limit/overload failures instead of stalling into BLOCKED.
+
+An **approved** team plan's `review_mode`, `models`, and `config_overrides` take precedence over `.happysquad/config.json` for that run. An absent or unapproved plan means the loop behaves exactly as before — config.json alone governs.
 
 ## The brainstorm session
 
