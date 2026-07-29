@@ -105,15 +105,15 @@ Each worktree has its own `.happysquad/state.json` (with `mode: "fleet-child"` a
 
 When Matt Pocock skills are configured (`docs/agents/issue-tracker.md` present), the fleet reads its tasks from the tracker's **frontier** instead of asking the user to type them. `/to-tickets` is the natural feeder: it decomposes a feature into vertical tracer-bullet tickets (each `ready-for-agent`, sized to one context window); the fleet executes the frontier in parallel worktrees. This keeps happysquad as the executor — decomposition and context-sizing stay in Matt's domain.
 
-Read the tracker type from `docs/agents/issue-tracker.md`, then collect the frontier — tickets that are `ready-for-agent` **and** have no open blockers:
+Read the tracker type from `docs/agents/issue-tracker.md`, then collect the frontier — tickets that are `ready-for-agent` **and** have no open blockers **and** are not already `squad:passed`:
 
-- **Local markdown** — glob `.scratch/*/issues/*.md`; a ticket is on the frontier when its body says `Status: ready-for-agent` and every entry in its `Blocked by:` line is done. Use its `**What to build:**` as the child task.
-- **GitHub** — `gh issue list --label ready-for-agent --state open --json number,title,body`, dropping any with an open blocking issue.
+- **Local markdown** — glob `.scratch/*/issues/*.md`; a ticket is on the frontier when its body says `Status: ready-for-agent`, it is not marked `squad:passed`, and every entry in its `Blocked by:` line is done. Use its `**What to build:**` as the child task.
+- **GitHub** — `gh issue list --label ready-for-agent --state open --json number,title,body`, dropping any with an open blocking issue and any carrying the `squad:passed` label (e.g. pipe through `jq 'map(select(.labels | map(.name) | index("squad:passed") | not))'`, or use `--search '-label:squad:passed'`).
 - **GitLab** — the same via `glab`. **Other / unparseable** — fall back to the manual sources above and say why.
 
 Each frontier ticket becomes one fleet child. Record its reference (number or file path) in `fleet.json.tasks[i].ticket`.
 
-**Frontier pumping (optional).** Tracker tickets can carry blocking edges, so the frontier advances as work lands. After a child resolves, re-scan and dispatch any ticket it just unblocked (still capped at `max_parallel`). To resolve blockers within a run, label a finished child's ticket `squad:passed` and treat that as "done" — never close the issue (the user owns close timing, like merge timing). Prefer the simpler **snapshot** mode (read the frontier once, don't pump) unless the ticket chain is long.
+**Frontier pumping (optional).** Tracker tickets can carry blocking edges, so the frontier advances as work lands. After a child resolves, re-scan and dispatch any ticket it just unblocked (still capped at `max_parallel`). To resolve blockers within a run, label a finished child's ticket `squad:passed` and treat that as "done" — never close the issue (the user owns close timing, like merge timing). A `squad:passed` ticket is excluded from every re-scan (see the frontier definition above), so pumping never re-dispatches a ticket the squad already completed. Prefer the simpler **snapshot** mode (read the frontier once, don't pump) unless the ticket chain is long.
 
 ### Worktree creation
 
