@@ -25,7 +25,7 @@ Steps:
    - Last reviewer verdict and route (if any) — plus workstream targets when parallel
    - Conflict-check status: CLEAN / VIOLATIONS / pending
    - Files changed so far (`git diff --name-only` against the merge base, or against `HEAD` if no merge base detected)
-   - Next recommended command (e.g. "Continue with /happysquad-loop to resume", "Run /implement to address feedback", "Run nothing — loop is COMPLETE")
+   - Next recommended command (e.g. "Continue with /happysquad-loop to resume", "Run /squad-implement to address feedback", "Run nothing — loop is COMPLETE")
    - If `current_state` is `BLOCKED`, also show the top 3 blocking issues from the most recent review.md.
 
 5. **Fleet section** (only if any fleet.json exists with status != complete or was the most recently updated):

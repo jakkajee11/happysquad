@@ -16,7 +16,7 @@ description: |
 
   <example>
   Context: User wants to manually run the implementer on an existing design.
-  user: /implement use the design we already have for the auth refactor
+  user: /squad-implement use the design we already have for the auth refactor
   assistant: Dispatching implementer agent — it will read .happysquad/runs/<run-id>/design.md and produce code.
   </example>
 model: sonnet

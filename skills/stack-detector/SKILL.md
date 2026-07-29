@@ -137,7 +137,14 @@ These are starting heuristics. The skill writer should extend them as new stack-
 | New requirement (no specific stack)       | PRD writing                                      | `prd-writer`                                  |
 | Project has user stories                  | Story quality scoring                            | `user-story-review`                           |
 
-For any detected signal where no installed skill is found, mark it under `## Gaps` in the profile.
+| React / Vue / Svelte frontend             | Component, hook, perf, a11y frontend review      | `react-reviewer`, `ui-ux-pro-max:ui-ux-pro-max` |
+| Node / Next.js / Express / NestJS backend | API routes, middleware, auth, DB backend review  | `backend-reviewer`, `nextjs-backend`          |
+| Auth / payment / secrets surface          | Dedicated security pass on the diff              | `security-review`                             |
+| Has a test suite                          | Test-first authoring, red→green rigor            | `tdd`                                         |
+| Frontend app (Vite / Next / CRA)          | Run + probe the live app (Playwright)            | `webapp-testing`                              |
+| Detected gap (capability, no skill)       | Author a new project-specific skill to cover it  | `skill-creator`                               |
+
+For any detected signal where no installed skill is found, mark it under `## Gaps` in the profile. When a gap recurs across runs, recommend running `skill-creator` to close it rather than leaving the agent on generic defaults.
 
 ## Per-agent assignment
 
@@ -157,10 +164,15 @@ After mapping, output the skills each agent should load for *this* project.
 
 ### tester
 - `engineering:testing-strategy` — test plan structure
+- `tdd` — test-first authoring discipline; sharpens the red→green proof (failing tests that pin the AC, not after-snapshots)
+- `webapp-testing` — Playwright to run + probe the live app for frontend slices (catches what unit tests miss)
 - (frontend) Vitest patterns; (backend) xUnit fixtures — no specific skill
 
 ### reviewer
-- `engineering:code-review` — five-axis review (REQ/SEC/PERF/STD/TEST)
+- `engineering:code-review` — six-axis review (REQ/SEC/PERF/STD/SIMPL/TEST)
+- `react-reviewer` — frontend component/hook/perf/a11y axis (offloads the chief reviewer on FE slices)
+- `backend-reviewer` / `nextjs-backend` — backend API/middleware/auth axis (offloads the chief reviewer on BE slices)
+- `security-review` — dedicated security pass on auth/payment/secrets diffs
 - (project-specific) FastEndpoints REPR adherence — covered by `fastendpoints`
 
 ### product
@@ -170,6 +182,7 @@ After mapping, output the skills each agent should load for *this* project.
 Rules:
 - Don't suggest a skill that isn't in the runtime `<available_skills>` list. If the user has the skill from one plugin (e.g. `react-vite-frontend` from `wai-relay`), list it. If they have both `react-vite-frontend` and `wai-relay:react-vite-frontend`, list both and note they may be equivalent.
 - Don't pad. Better to recommend two strong skills than five weak matches.
+- The stack-specialist reviewers (`react-reviewer`, `backend-reviewer`, `nextjs-backend`, `security-review`) are the chief reviewer's offload targets — recommending the one(s) matching the detected stack lets the orchestrator dispatch a frontend/backend specialist in parallel instead of the chief carrying every axis alone.
 - If no skill covers a critical signal, the agent's section says `(no skill found — agent will use generic defaults)`.
 
 ## Output format
@@ -209,7 +222,6 @@ Project root: <path>
 ## Gaps
 
 - No skill found for Entity Framework Core migration patterns specifically. The general `wai-relay:migration-planner` covers the expand/contract pattern but doesn't know EF Core syntax. Consider creating one if migrations are frequent.
-- No skill for Playwright e2e test authoring. The tester agent will use generic patterns.
 
 ## Signal log
 
@@ -250,13 +262,12 @@ Project root: <path>
   "recommended_skills": {
     "architecter": ["fastendpoints", "wai-relay:api-contract-design", "wai-relay:react-vite-frontend"],
     "implementer": ["fastendpoints", "wai-relay:react-vite-frontend"],
-    "tester": ["engineering:testing-strategy"],
-    "reviewer": ["engineering:code-review", "security-review"],
+    "tester": ["engineering:testing-strategy", "tdd", "webapp-testing"],
+    "reviewer": ["engineering:code-review", "security-review", "react-reviewer", "backend-reviewer"],
     "product": []
   },
   "gaps": [
-    "no-skill-for-efcore-migrations",
-    "no-skill-for-playwright-e2e"
+    "no-skill-for-efcore-migrations"
   ],
   "signals": [
     { "file": "package.json", "type": "manifest", "extracted": { "react": "18.3.1", "vite": "5.4.1" } },

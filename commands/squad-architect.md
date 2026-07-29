@@ -12,6 +12,6 @@ Steps:
 3. Update `.happysquad/state.json` to `current_state = ARCHITECT`, `iteration = 1` (or bump if continuing).
 4. Launch the `architecter` subagent via the Agent tool, with model from config (default `opus`). Pass the task, the run-id, and the run directory path.
 5. Wait for the `DESIGN_READY: <path>` completion marker.
-6. Report the path to the design document and stop. Do not auto-advance to /implement.
+6. Report the path to the design document and stop. Do not auto-advance to /squad-implement.
 
 Use this command when you want to inspect the design before committing to implementation, or when the design needs human review.

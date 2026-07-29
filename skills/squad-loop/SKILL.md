@@ -5,7 +5,7 @@ description: |
   for a software-development task. Defines the state machine, per-state inputs and outputs, the routing
   table the reviewer drives, the round cap, and the BLOCKED escalation. Trigger when the user runs
   /happysquad-loop, asks to "run the squad", "start the dev loop", "iterate until pass", or invokes any of
-  /architect, /implement, /test, /review individually.
+  /squad-architect, /squad-implement, /squad-test, /squad-review individually.
 ---
 
 # Squad Loop
@@ -118,6 +118,7 @@ Read `.happysquad/config.json` if present. Defaults if missing:
   "cap": 5,
   "inner_cap": 2,
   "coverage_threshold": 80,
+  "fable_escalation": { "enabled": false },
   "models": {
     "architecter": "opus",
     "implementer": "sonnet",
@@ -192,7 +193,7 @@ Evidence-gate rules:
 
 - A claim that doesn't reproduce is never "close enough" — route it back. A loop that trusts claims converges on paperwork, not on working code.
 - Full command output goes to disk (test-output.txt or a file referenced from evidence-check.md), not into your context. Quote at most the last ~20 lines inline, and only on failure.
-- Manual entry points (`/implement`, `/test`, `/review`) have no orchestrator, so the gate doesn't run; the reviewer treats unverified numbers as claims (see its evidence-check input).
+- Manual entry points (`/squad-implement`, `/squad-test`, `/squad-review`) have no orchestrator, so the gate doesn't run; the reviewer treats unverified numbers as claims (see its evidence-check input).
 
 ### 4. Transition rules
 
@@ -389,7 +390,7 @@ This file is part of the run's audit trail and gets attached as input to the chi
 
 ### 10. Round cap
 
-Before transitioning, check `iteration > cap`. If yes — or the convergence check (§4) triggered an early stop:
+Before transitioning, check `iteration > cap`. If yes — or the convergence check (§4) triggered an early stop — run the model-escalation gate (§10a) first. If it doesn't apply, proceed straight to BLOCKED:
 
 1. Set `current_state = BLOCKED`.
 2. Write `.happysquad/runs/<run-id>/BLOCKED.md` summarizing:
@@ -399,6 +400,23 @@ Before transitioning, check `iteration > cap`. If yes — or the convergence che
    - Convergence analysis: each recurring blocker with the rounds it appeared in, the routes tried, and the fix attempts that failed — this is the raw material for a `lessons/*` wiki entry
    - A recommended next manual action (e.g., "split the task", "consult human reviewer", "adjust acceptance criteria")
 3. Exit the loop and report BLOCKED to the user. Do not silently retry.
+
+### 10a. Model escalation before BLOCKED (fable-delegate, opt-in)
+
+A BLOCKED run is usually correct — convergence or the cap means cheaper routing is exhausted. But some blockers are exactly where a stronger model tier changes the outcome: a recurring race/heisenbug, a multi-constraint design knot the architecter keeps re-partitioning, or security/migration/data-loss work already in prod. Give the run one Fable 5 attempt before dying — but only when opted in, because Fable is expensive.
+
+**Gate — all must hold:**
+- `fable_escalation.enabled` is true in the effective config (`.happysquad/config.json` or an approved team-plan's `config_overrides`), AND
+- `state.json.fable_attempted` is not true — one attempt per run, never a fable loop, AND
+- the blocker reads as model-tier-hard (at least one fable-delegate signal: two failed fix attempts on the same defect, concurrency/race/CI-only, multi-constraint design, security/data-loss/migration, or subtle invariant work). A blocker that is a missing *decision* (scope, requirement, ambiguity only the human can resolve) does NOT qualify — no model tier fixes that; go straight to BLOCKED.
+
+**If the gate holds — one attempt:**
+1. Set `state.json.fable_attempted = true` before dispatch (idempotent against double-dispatch). Tell the user in one line — a notice, not a question: "Escalating the blocker to Fable: <why>."
+2. Dispatch via the Agent tool — `subagent_type: general-purpose`, `model: fable`, an addressable `name` — with a handoff brief built from the BLOCKED.md draft + feedback.md: mission (the recurring blocker, solve mode), observable success criteria (the failing `Verify` commands that must pass), verified facts (file:line + exact error output from the failed rounds), already-tried (every prior fix attempt and what happened), constraints (build/test commands from CLAUDE.md), scope boundary (the workstream's `owned_files`), verification commands, report contract. Fable starts with zero context — the brief is the whole skill.
+3. When Fable returns, the orchestrator owns "done": run the evidence gate (§3 — re-run build + full suite) and diff-review its changes like a hostile reviewer. Never relay "Fable says fixed" unverified.
+4. Then a delta review (chief reviewer, `mode=delta`). PASS → COMPLETE. Still failing → fall through to the real BLOCKED (§10, step 1).
+
+If Fable returns stuck too, don't third-attempt — proceed to BLOCKED and record in BLOCKED.md that Fable was tried and what it concluded. Two tiers failing the same way usually means the problem is mis-specified; that is the raw material for a `lessons/*` entry and a user decision. This never applies to a missing-decision blocker, and never more than once — escalation is one borrowed attempt, not a second loop.
 
 ### 11. External executors (team-plan roles)
 
@@ -457,10 +475,10 @@ One retry, then escalate. Two identical failures in a row means the problem is s
 
 Each manual command corresponds to one state. When the user invokes one directly:
 
-- `/architect <task>` → run ARCHITECT only, then stop. Do not auto-advance.
-- `/implement` → assumes `.happysquad/runs/<run-id>/design.md` exists for the current run-id (from state.json), or asks which run to use.
-- `/test` → assumes implementation.md exists.
-- `/review` → assumes test-report.md exists.
+- `/squad-architect <task>` → run ARCHITECT only, then stop. Do not auto-advance.
+- `/squad-implement` → assumes `.happysquad/runs/<run-id>/design.md` exists for the current run-id (from state.json), or asks which run to use.
+- `/squad-test` → assumes implementation.md exists.
+- `/squad-review` → assumes test-report.md exists.
 
 Manual invocations still write to the same state.json so the user can switch between manual and looped modes.
 
@@ -524,6 +542,23 @@ Never auto-ingest. The user owns the wiki write boundary.
 - Evidence-gate re-runs reuse the exact commands the agents recorded; send output to disk and read only exit codes and the coverage report file — never paste full logs into context.
 - Don't pass full file contents to subagents. Pass file paths and let the subagent Read what it needs.
 - Don't paste subagent output into your own response back to the user — summarize from the artifact files instead.
+
+## Context gate — don't run the loop degraded
+
+Token discipline (above) keeps *subagent* contexts lean, but the **orchestrator's own context** grows across a run: design.md, every review.md iteration, evidence-check.md, feedback.md, and the per-wave state. Reasoning degrades past the [smart zone](https://www.aihero.dev/ai-coding-dictionary/smart-zone) (~120k tokens on current models) — and a degraded orchestrator makes worse routing calls, which is exactly where the loop's quality is decided.
+
+You can't read your token count directly, so gate on **load signals**:
+
+- After any REVIEW round at **iteration ≥ 3**, or after the second parallel wave, or when the working set (design + all reviews + evidence + feedback you've read) is plainly large — run a **context checkpoint** before the next state.
+- A checkpoint never blocks: state is already on disk in `state.json` (every transition writes it), so resuming in a fresh session loses nothing.
+
+Checkpoint protocol:
+
+1. Write a one-line `HANDOFF.md` to the run dir: current state, iteration, last verdict, and the single next action — enough for a fresh orchestrator to continue without re-reading everything.
+2. Tell the user: "Context is approaching the smart zone — state persisted in `state.json` + `HANDOFF.md`. Continue in a fresh session with `/squad-resume` (or `/handoff` / `claude-handoff` if you want the conversation carried too)."
+3. Stop the current session's loop there. Don't push on into the next state on degraded context — a wrong route burns a full round.
+
+The squad's on-disk state is what makes this safe: cross-session resume (below) picks up at the exact recorded state, so handing off mid-loop is free, not lossy.
 
 ## Resuming an interrupted loop
 

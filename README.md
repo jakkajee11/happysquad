@@ -40,10 +40,10 @@ Model assignment uses the **Balanced** strategy — heavier reasoning (product j
 | `/brainstorm`      | Run a 3-round session where all five agents analyze a topic together. **Use when the path is unclear.** |
 | `/squad-assemble`  | Analyze a spec and recommend team composition (review mode, specialists, models, external-executor roles) behind an approval gate. Optional pre-loop step. |
 | `/happysquad-loop`  | Run the full architect → implement → test → review loop until PASS or cap. **Use when the path is clear.** |
-| `/architect`       | Run only the architecter — produce a design, stop.                                |
-| `/implement`       | Run only the implementer against the current run's design.                        |
-| `/test`            | Run only the tester against the current run's implementation.                     |
-| `/review`          | Run only the reviewer against the current run's tests.                            |
+| `/squad-architect`       | Run only the architecter — produce a design, stop.                                |
+| `/squad-implement`       | Run only the implementer against the current run's design.                        |
+| `/squad-test`            | Run only the tester against the current run's implementation.                     |
+| `/squad-review`          | Run only the reviewer against the current run's tests.                            |
 | `/squad-status`    | Show the active run / brainstorm state, history, and recommended next action.     |
 | `/wiki-ingest`     | Ingest a source (happysquad artifact, URL, file, paste) into the project wiki.     |
 | `/wiki-ask`        | Ask the wiki a question — answers with citations to wiki articles.                |
@@ -62,7 +62,7 @@ The reviewer council operates in one of three modes (set in `.happysquad/config.
 { "review_mode": "split-on-risk" }
 ```
 
-**`single`** — one `reviewer` (opus) personally evaluates all five quality axes (REQ / SEC / PERF / STD / TEST) plus CONFLICT. Cheapest token-wise; sufficient for low-risk CRUD work.
+**`single`** — one `reviewer` (opus) personally evaluates all six quality axes (REQ / SEC / PERF / STD / SIMPL / TEST) plus CONFLICT. Cheapest token-wise; sufficient for low-risk CRUD work.
 
 **`split`** — four specialists (`security-reviewer`, `performance-reviewer`, `requirement-reviewer`, `standard-reviewer`) run in parallel; the chief `reviewer` aggregates their verdicts, runs TEST + CONFLICT itself, and makes the final routing decision. Highest cost but strongest audit trail; recommended for financial / healthcare / regulated codebases where SEC issues are expensive to miss.
 
@@ -144,6 +144,28 @@ Claude agents remain the primary team. External executors (`glm`, canonical; `op
 - **Quota fallback** — runs a phase through the external model after repeated rate-limit/overload failures instead of stalling into BLOCKED.
 
 An **approved** team plan's `review_mode`, `models`, and `config_overrides` take precedence over `.happysquad/config.json` for that run. An absent or unapproved plan means the loop behaves exactly as before — config.json alone governs.
+
+## Planning pipeline — Matt Pocock skills (optional)
+
+happysquad executes one well-defined task. For work that's bigger, vaguer, or needs to span sessions, chain it behind the [Matt Pocock](https://www.aihero.dev) skill suite (`/ask-matt`), which owns the upstream phases happysquad skips or does weakly — sharpening the requirement, decomposing it, sizing it to one context window.
+
+```
+wayfinder        huge/unclear → decision-ticket map (one ticket per session, fog-of-war)
+  → grill-with-docs   interview the human → sharp requirement (+ CONTEXT.md / ADRs)
+  → to-spec / to-prd
+  → to-tickets   vertical tracer-bullet slices, each ≤ one context window, labelled ready-for-agent
+    → /squad-fleet    each frontier ticket → one happysquad-loop in its own worktree
+```
+
+Where happysquad plugs in: **the executor at the end.** Every `to-tickets` slice is one `ready-for-agent` task — exactly what `/happysquad-loop` (one slice) or `/squad-fleet` (the whole frontier in parallel) consumes. `/squad-fleet` reads the tracker frontier directly when `docs/agents/issue-tracker.md` is configured, so `to-tickets` → `/squad-fleet` is a clean handoff with no retyping.
+
+Why this makes work better:
+
+- **Right layer, right tool.** `to-tickets` cuts *vertical* feature slices across every layer; happysquad's architecter then splits a slice into *horizontal* workstreams (backend / frontend) internally. They compose, they don't compete.
+- **Sharp input.** happysquad's biggest failure mode is an underspecified task; `grill-with-docs` fixes that at the source.
+- **One context per unit.** Matt's suite is built around clearing context between units of work; happysquad's orchestrator matches with its own context gate (see the squad-loop skill).
+
+Two stores to keep in sync: Matt writes `CONTEXT.md` + ADRs; happysquad's wiki lives in `knowledge/`. Ingest ADRs into the wiki (`/wiki-ingest`) so there's one source of truth. These are a separate plugin — install/enable independently; happysquad runs standalone without them.
 
 ## The brainstorm session
 

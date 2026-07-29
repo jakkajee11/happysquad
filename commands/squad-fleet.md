@@ -9,9 +9,10 @@ Steps:
 
 1. Parse `$ARGUMENTS`:
    - If it contains `--max=N`, extract N as the concurrency cap.
-   - If it contains a file path, read newline-separated tasks from that file.
+   - If `docs/agents/issue-tracker.md` exists (Matt Pocock skills configured), read the **tracker frontier** (open `ready-for-agent` tickets with no open blockers) as the task set — see the skill's "Tracker frontier mode". Each ticket is one child. Skip to step 3 unless the frontier is empty.
+   - Else if `$ARGUMENTS` contains a file path, read newline-separated tasks from that file.
    - Otherwise treat the rest as a single task description and ask the user how many additional tasks to add.
-2. If no tasks were resolved, use AskUserQuestion to gather them — ask first for the count (1-10), then for each task in turn.
+2. If no tasks were resolved (no tracker, empty frontier, no file), use AskUserQuestion to gather them — ask first for the count (1-10), then for each task in turn.
 3. Generate `fleet_id` = `YYYYMMDD-HHMMSS-<slug>` where slug is a short summary of the fleet's purpose (or the first task's first words if no overall purpose).
 4. If `.happysquad/stack-profile.md` is missing, invoke the `stack-detector` skill once at the fleet root before any child runs.
 5. Create `.happysquad/fleets/<fleet_id>/`, write `tasks.md`, initialize `fleet.json`.

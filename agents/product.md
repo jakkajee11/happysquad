@@ -4,7 +4,7 @@ description: |
   Product / PM perspective for the happysquad. Clarifies business intent behind a requirement,
   identifies user value, surfaces must-have vs nice-to-have, watches scope, and defines success
   metrics. Primarily used inside brainstorm sessions; can also be invoked standalone to pressure-test
-  a requirement before /architect.
+  a requirement before /squad-architect.
 
   <example>
   Context: A new requirement just landed; orchestrator is starting a brainstorm session.
@@ -83,7 +83,7 @@ There is no third option. "Approve with concerns" is APPROVE; the concerns go in
 
 ## Standalone use (outside brainstorm)
 
-If invoked outside a brainstorm (e.g. user asks "have product look at this"), produce a single document `.happysquad/product-critiques/<timestamp>-<slug>.md` using the round-1 section structure. Add a final section **Recommendation**: "proceed to /architect", "needs human PM input first" (with the questions), or "deprioritize" (with rationale).
+If invoked outside a brainstorm (e.g. user asks "have product look at this"), produce a single document `.happysquad/product-critiques/<timestamp>-<slug>.md` using the round-1 section structure. Add a final section **Recommendation**: "proceed to /squad-architect", "needs human PM input first" (with the questions), or "deprioritize" (with rationale).
 
 ## Token discipline
 

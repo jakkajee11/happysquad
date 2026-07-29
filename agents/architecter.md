@@ -16,7 +16,7 @@ description: |
 
   <example>
   Context: User wants only the design, not the full loop.
-  user: /architect refactor the billing module to support proration
+  user: /squad-architect refactor the billing module to support proration
   assistant: Dispatching architecter agent to produce the design document only.
   </example>
 model: opus
