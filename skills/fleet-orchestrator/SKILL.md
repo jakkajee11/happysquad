@@ -115,6 +115,18 @@ Each frontier ticket becomes one fleet child. Record its reference (number or fi
 
 **Frontier pumping (optional).** Tracker tickets can carry blocking edges, so the frontier advances as work lands. After a child resolves, re-scan and dispatch any ticket it just unblocked (still capped at `max_parallel`). To resolve blockers within a run, label a finished child's ticket `squad:passed` and treat that as "done" — never close the issue (the user owns close timing, like merge timing). A `squad:passed` ticket is excluded from every re-scan (see the frontier definition above), so pumping never re-dispatches a ticket the squad already completed. Prefer the simpler **snapshot** mode (read the frontier once, don't pump) unless the ticket chain is long.
 
+### Drain mode (`/squad-drain`)
+
+Drain mode is fleet's serial, non-interactive variant for continuously working a tracker queue. It reuses every mechanism below — worktree creation, concurrent dispatch, monitoring, pumping, the aggregate report, resume — and changes only the entry, the defaults, and the empty/end handling so the command is safe to wrap in `/loop`. `/squad-drain` sets `mode: "drain"` on the fleet; `fleet.json.mode` records it.
+
+- **Task source — tracker frontier only.** Collect the frontier exactly as "Tracker frontier mode" above. Drain has **no** interactive/file/paste fallback (unlike Setup's sources). If `docs/agents/issue-tracker.md` is absent, print one line — "drain requires an issue-tracker (Matt Pocock `/to-tickets`); none configured — use `/squad-fleet` for manual task lists." — and **stop**. Never prompt for tasks.
+- **Defaults differ from fleet.** `max_parallel` defaults to **1** (serial drain, one ticket at a time), overridable with `--max=N`. **Pumping is ON by default** (the point of a drain is to follow the chain as blockers clear); `--no-pump` reverts to a single snapshot pass.
+- **Empty frontier → clean silent exit.** If the frontier is empty at start, print one line — "Frontier empty — nothing to drain." — and stop with success. No prompt, no fallback. This is what makes `/loop <interval> /squad-drain` cheap: an empty tick is a no-op, not a question.
+- **No interactive tail.** Drain skips the end-of-fleet prompts (the wiki-ingest offer and the worktree-cleanup prompt under "Cleanup" and "Wiki & fleet"). It writes the aggregate report as usual and surfaces the merge/BLOCKED/cleanup pointers as text for the human to act on outside the loop — nothing blocks on input.
+- **Continuous watch.** `/squad-drain` alone drains the current frontier once and exits. For a standing watch, pair it with the built-in `/loop`: `/loop 5m /squad-drain` re-invokes it every 5 minutes — each tick drains whatever is on the frontier and exits, an empty frontier is a silent no-op, and tickets added between ticks are picked up on the next one. No bespoke poller; `/loop` owns the recurrence, drain owns one pass.
+
+Everything else (base branch, `fleet.json` tracking, BLOCKED-doesn't-stall-siblings, resume protocol) behaves exactly as in the sections below.
+
 ### Worktree creation
 
 For each task:

@@ -50,6 +50,7 @@ Model assignment uses the **Balanced** strategy — heavier reasoning (product j
 | `/wiki-lint`       | Run quality checks on the wiki (auto-fix links + heuristic findings).             |
 | `/squad-detect`    | Scan the project to detect tech stack and write per-agent skill recommendations.  |
 | `/squad-fleet`     | Run multiple independent happysquad-loop tasks in parallel, each in its own worktree. |
+| `/squad-drain`     | Serially drain the tracker frontier — ready-for-agent tickets one at a time, pumping as blockers clear. Pair with `/loop` for a standing watch. |
 | `/squad-resume`    | Continue the most recent in-progress run / brainstorm / fleet after a session restart. |
 
 All commands share `.happysquad/` state for runs/brainstorms and `knowledge/` for the wiki, so you can move freely between modes. A typical full workflow is `/brainstorm` → review consensus → ingest decision to wiki → `/happysquad-loop` → ingest design and lessons to wiki.
@@ -101,6 +102,8 @@ For multiple unrelated tasks (a backlog of features, a sweep of bug fixes), `/sq
 - A BLOCKED child does not stall the fleet — others keep going.
 
 Wiki ingests at the end of a fleet are intentionally serialized (one at a time) because they share `knowledge/wiki/index.md`. Everything else parallelizes.
+
+For a **continuous** drain of a ticket queue rather than a one-shot batch, `/squad-drain` runs the tracker frontier serially (`--max=1` by default), pumping as blockers clear, and — unlike `/squad-fleet` — exits silently on an empty frontier with no interactive prompts. That makes it safe to wrap in the built-in loop: `/loop 5m /squad-drain` keeps a standing watch, draining whatever is `ready-for-agent` on each tick and no-op'ing when the queue is empty. Requires a configured `docs/agents/issue-tracker.md` (Matt Pocock `/to-tickets`).
 
 ## Cross-session resume
 

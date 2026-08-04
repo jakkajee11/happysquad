@@ -1,6 +1,6 @@
 {
   "name": "happysquad",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Software-development squad with five core agents plus four optional specialist reviewers (security/performance/requirement/standard). Three review modes — single, split, split-on-risk (default). Evidence-based loop gates (verified build/test/coverage, red→green proof), per-finding Verify commands with an inner fix loop + delta review, convergence detection with early BLOCKED. Parallel-safe execution via workstreams + ownership maps, fleet mode for multi-task git-worktree isolation, 3-round brainstorm session, stack detector for per-agent skill recommendations, a compounding Karpathy-style project wiki, and cross-session resume (state survives session close; /squad-resume + SessionStart nudge). A pre-loop team-assembly step (/squad-assemble) analyzes the spec and proposes review mode, specialists, models, and optional external-executor roles behind an approval gate; approved plans are honored by the loop, ignored otherwise. External executors (glm/opencode, advisory-only) cover exactly three roles — mechanical offload, advisory cross-review, quota fallback — never parallel co-implementation.",
   "author": {
     "name": "happydaddy"
