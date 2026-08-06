@@ -39,6 +39,7 @@ Model assignment uses the **Balanced** strategy — heavier reasoning (product j
 |--------------------|-----------------------------------------------------------------------------------|
 | `/brainstorm`      | Run a 3-round session where all five agents analyze a topic together. **Use when the path is unclear.** |
 | `/squad-assemble`  | Analyze a spec and recommend team composition (review mode, specialists, models, external-executor roles) behind an approval gate. Optional pre-loop step. |
+| `/ask-kilo`        | Advisory second opinion from an external non-Claude model via the `kilo` CLI. Prompt-only — no repo access, no edits, zero verdict weight. |
 | `/happysquad-loop`  | Run the full architect → implement → test → review loop until PASS or cap. **Use when the path is clear.** |
 | `/squad-architect`       | Run only the architecter — produce a design, stop.                                |
 | `/squad-implement`       | Run only the implementer against the current run's design.                        |
