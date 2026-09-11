@@ -61,6 +61,7 @@ Orchestrator maintains `.happysquad/state.json` (or `.happysquad/runs/<run-id>/s
   "run_id": "20260520-103045-add-api-key-auth",
   "task": "<one-line task description>",
   "base_ref": "<git rev-parse HEAD at run start — null if the repo has no commits>",
+  "iter_ref": null,
   "mode": "parallel",
   "parent_fleet_id": null,
   "worktree": null,
@@ -186,7 +187,19 @@ Completion markers are **claims, not facts**. Verify every claim against evidenc
 
 1. Re-run the exact test command(s) recorded in test-report.md (workstream-scoped in parallel mode). Compare the real exit code and pass/fail counts against the claimed `status`.
 2. Read coverage from the coverage tool's report file — the tester records its path in test-report.md (e.g. `coverage/coverage-summary.json`, `coverage.xml`, `lcov.info`). The verified number from that file is what the REVIEW coverage gate uses; the marker's `coverage=` field is only a claim. No report file → record coverage as `"unverified"` (a TEST finding for the reviewer, not a silent pass).
-3. Confirm test-report.md contains the `## Red→green evidence` section covering the new AC/bugfix tests (see the tester agent). A missing section — or any test recorded as *passing* at `base_ref` — means the tests don't prove the change: write the discrepancy to feedback.md, `iteration += 1`, re-dispatch the tester.
+3. Confirm test-report.md contains the `## Red→green evidence` section covering the new
+   AC/bugfix tests (see the tester agent). Reject and re-dispatch — write the discrepancy to
+   feedback.md, `iteration += 1` — when any of these hold:
+   - the section is missing;
+   - any test is recorded as *passing* at the ref;
+   - the section has no `Kind` column, or a row's `Kind` is absent;
+   - a row is `assertion` or `compile` but the tester ran no proof — no worktree run is
+     evidenced and `test-output.txt` has no corresponding failure. A described or predicted
+     red is not a red; the honest value is `not-runnable`;
+   - `iter_ref` is set in state.json and the report proves against `base_ref` instead.
+
+   Record `"red_kinds": { "assertion": <n>, "compile": <n>, "not_runnable": <n> }` in the
+   history entry. All-compile is **not** a gate failure — it is a signal the reviewer reads.
 4. Record `"verified": { "tests": "<pass|fail>", "coverage": <percent | "unverified"> }` in the history entry.
 
 Evidence-gate rules:
@@ -213,10 +226,30 @@ After `PARALLEL_TEST` → next state = `CONFLICT_GATE`. Then `REVIEW`.
 After `REVIEW`:
 - If `verdict=PASS` → next state = `COMPLETE`. Exit loop, report success.
 - If `verdict=FAIL` and `next=architecter` → write reviewer's issues to `feedback.md`, `current_state = ARCHITECT`, `iteration += 1`. The architecter may revise workstreams. (Design rework never takes the inner fix loop.)
-- If `verdict=FAIL` and `next=implementer` or `next=tester` → check inner-loop eligibility (§5): if every blocker in review.md has a machine-checkable `Verify` command, run the **inner fix loop** instead of a full pipeline round. Otherwise:
+- If `verdict=FAIL` and `next=implementer` or `next=tester` → **snapshot the iteration state first** (below), then check inner-loop eligibility (§5): if every blocker in review.md has a machine-checkable `Verify` command, run the **inner fix loop** instead of a full pipeline round. Otherwise:
   - `next=implementer` and `mode=single` → `current_state = IMPLEMENT`, `iteration += 1`.
   - `next=implementer` and `mode=parallel` → `current_state = PARALLEL_IMPLEMENT`, but **only re-dispatch the workstreams listed in the reviewer's `workstreams` field** (subset re-dispatch). `iteration += 1`.
   - `next=tester` → analogous to implementer.
+
+#### Iteration snapshot — on every FAIL routed to implementer/tester
+
+Before the fix is applied, capture the current working tree (including untracked files) as a
+dangling commit, without touching the working tree, the index, or the stash:
+
+```bash
+IDX=$(mktemp -u)
+TREE=$(GIT_INDEX_FILE="$IDX" sh -c 'git add -A >/dev/null && git write-tree')
+ITER_REF=$(git commit-tree "$TREE" -p HEAD -m "run <run-id> iteration <n> snapshot")
+rm -f "$IDX"
+```
+
+Record `"iter_ref": "<sha>"` in state.json (overwrite the previous one; only the most recent
+matters). The tester proves the next iteration's red against this ref.
+
+`git add -A` against a temporary index honours `.gitignore`, so dependency trees are excluded
+exactly as they are in a `base_ref` worktree. The commit is unreachable and will be collected
+by `git gc` eventually — far beyond the lifetime of a loop iteration, and it is re-taken on
+every FAIL.
 
 #### Convergence check — on every FAIL, before routing
 
