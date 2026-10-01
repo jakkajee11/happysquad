@@ -116,6 +116,8 @@ When you come back:
 - **`/squad-resume`** scans every state file (`state.json`, brainstorm `session.json`, fleet `fleet.json`), finds the most recently updated work that isn't COMPLETE/BLOCKED, and continues it from exactly where it stopped. If multiple things are in progress, it asks which to resume.
 - Each mode also self-resumes: re-running `/happysquad-loop`, `/brainstorm`, or `/squad-fleet` detects in-progress state and offers resume / restart / new.
 
+- A run whose orchestrator stopped mid-phase (the agent finished, but the loop never transitioned) is recovered from the phase's output on disk — `/squad-resume` continues at the evidence gate instead of re-running the phase. While waiting on an agent, the orchestrator touches `.happysquad/runs/<run-id>/.orchestrator`, so an external watchdog can tell a stopped orchestrator from a slow agent.
+
 BLOCKED runs are never auto-resumed — they need a human decision, so `/squad-resume` surfaces them and points at the `BLOCKED.md` instead of silently retrying.
 
 > Hook support varies by environment. If the SessionStart nudge doesn't appear, `/squad-resume` and `/squad-status` always work — they read the same on-disk state directly.
