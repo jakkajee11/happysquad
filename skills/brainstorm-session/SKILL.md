@@ -86,9 +86,13 @@ Each agent in the brainstorm has a fixed perspective. Do not let them drift out 
 2. **Stack profile check** — same as squad-loop: if `.happysquad/stack-profile.md` is missing, invoke `stack-detector` first ("First run in this project — scanning stack"). If present but a manifest is newer than the profile, offer to refresh. The brainstorm's 5 agents will receive their per-agent skill list from `stack-profile.json` when dispatched.
 3. **Project conventions check (CLAUDE.md)** — same as squad-loop: if no `CLAUDE.md` exists at the repo root or `.claude/CLAUDE.md` and `.happysquad/.claude-md-nudged` is absent, nudge the user once (generate via /init / don't-ask-again / ask-next-time, recording the choice in the marker). Advisory — never blocks the session.
 4. Generate session-id.
-5. Create `.happysquad/brainstorms/<session-id>/`.
+5. Create `.happysquad/brainstorms/<session-id>/` and its `markers/` subdirectory.
 6. Write `topic.md` containing the verbatim topic plus any attached context the user provided.
 7. Initialize `session.json` with `current_round = 1`, `status = in_progress`.
+
+### Waiting on agents
+
+Every "wait for markers" below follows squad-loop §2 step 3 (`skills/squad-loop/SKILL.md`). Never end the turn while an agent is running. Pass each agent a `marker_file` at `.happysquad/brainstorms/<session-id>/markers/<round>-<agent>.txt` (`<round>` = `r1`, `r2`, `consensus`, `signoff`). When the Agent tool returns an async handle, poll those files in-turn and touch `.happysquad/brainstorms/<session-id>/.orchestrator` as the heartbeat.
 
 ### Round 1 — Divergent POV (parallel)
 
@@ -192,7 +196,7 @@ DISSENT *at sign-off* is a veto. It blocks the consensus from being declared con
 If `session.json` exists and `status = in_progress`:
 
 1. Ask the user: "Brainstorm session `<topic>` is at round <N>. Resume, restart, or start a new topic?"
-2. Resume: continue from `current_round`, re-dispatching only the agents whose round-N file is missing.
+2. Resume: continue from `current_round`. An agent is done when its marker file or its round-N file exists. If anything in the session dir changed in the last 10 minutes, agents may still be running: poll per "Waiting on agents" until their markers appear or the dir has been quiet for 10 minutes, then re-check. Re-dispatch only the agents that are still not done; if all are done, move to the next round.
 3. Restart: archive to `<session-id>-abandoned-<timestamp>/` and start fresh.
 
 ## Standalone product-critique mode
