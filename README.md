@@ -116,6 +116,8 @@ When you come back:
 - **`/squad-resume`** scans every state file (`state.json`, brainstorm `session.json`, fleet `fleet.json`), finds the most recently updated work that isn't COMPLETE/BLOCKED, and continues it from exactly where it stopped. If multiple things are in progress, it asks which to resume.
 - Each mode also self-resumes: re-running `/happysquad-loop`, `/brainstorm`, or `/squad-fleet` detects in-progress state and offers resume / restart / new.
 
+- A run whose orchestrator stopped mid-phase (the agent finished, but the loop never transitioned) is recovered from the phase's output on disk — `/squad-resume` continues at the evidence gate instead of re-running the phase. While waiting on an agent, the orchestrator touches `.happysquad/runs/<run-id>/.orchestrator`, so an external watchdog can tell a stopped orchestrator from a slow agent.
+
 BLOCKED runs are never auto-resumed — they need a human decision, so `/squad-resume` surfaces them and points at the `BLOCKED.md` instead of silently retrying.
 
 > Hook support varies by environment. If the SessionStart nudge doesn't appear, `/squad-resume` and `/squad-status` always work — they read the same on-disk state directly.
@@ -214,7 +216,7 @@ Iteration > cap (default 5) ─▶ BLOCKED with a structured report.
 
 The reviewer is the only agent that fails the loop. Its verdict + `next` field decide where the next iteration goes.
 
-**Evidence-based gates.** Completion markers are claims, not facts. Before every transition out of an implement/test state the orchestrator re-runs the implementer's build commands and the tester's test commands itself, reads coverage from the coverage tool's report file (never from prose), and requires **red→green proof** — every new AC/bugfix test must be shown to fail at the run's `base_ref` (via a throwaway worktree) before it counts. Verified values land in `evidence-check.md` and `state.json`; a claim that doesn't reproduce routes the loop back to the claiming agent.
+**Evidence-based gates.** Completion markers are claims, not facts. Before every transition out of an implement/test state the orchestrator re-runs the implementer's build commands and the tester's test commands itself, reads coverage from the coverage tool's report file (never from prose), and requires **red→green proof** — every new AC/bugfix test must be shown to fail at the ref it was written against (via a throwaway worktree) before it counts, and each row is classified `assertion` / `compile` / `not-runnable` so the reviewer can tell a test that *discriminates* a behaviour from one that merely touches new code. On a fix iteration the ref is `iter_ref`, a dangling snapshot of the state the fix was applied to — not `base_ref`, where the whole feature fatals and proves nothing about the fix. A red row the tester did not actually run is rejected at the gate. Verified values land in `evidence-check.md` and `state.json`; a claim that doesn't reproduce routes the loop back to the claiming agent.
 
 **Inner fix loop.** Every review issue carries a `Verify` command (exit code 0 = fixed; `manual` when only judgment can confirm). When a FAIL routes to implementer/tester and every blocker is machine-checkable, the orchestrator skips the full pipeline round: fix agent → run the per-finding checks (up to `inner_cap`, default 2 passes) → evidence gate → a **delta review** that confirms the fixes first-hand instead of re-deriving everything. A single `manual` blocker falls back to the full round.
 

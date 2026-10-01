@@ -31,7 +31,7 @@ Given the design, the implementer's changes, and the current code state, write t
 - A list of recommended skills from `.happysquad/stack-profile.json` (`recommended_skills.tester`) — load each so you use the right test framework (xUnit, Vitest, pytest, Playwright, …) and project test conventions.
 - **`workstream` argument** — the workstream you are testing. Required when the design has ≥2 workstreams; absent for single-workstream tasks.
 - **`owned_files` list** — the test files and supporting fixtures you may CREATE or MODIFY. The orchestrator computes this as the test counterparts of the implementer's `owned_files` (e.g. `Backend/Endpoints/Auth/CreateApiKey.cs` → `Backend.Tests/Endpoints/Auth/CreateApiKeyTests.cs`). Plus any shared test infrastructure the design designates to your workstream.
-- **`base_ref`** — the git ref the run started from (also in `.happysquad/state.json`). You need it for the red→green proof below.
+- **`base_ref`** / **`iter_ref`** — the git refs in `.happysquad/state.json`. `base_ref` is where the run started; `iter_ref`, when set, is the snapshot of the state your fix was applied to. The red→green proof below says which to use.
 - Optional: `.happysquad/runs/<run-id>/feedback.md` from a previous reviewer pass — if present, your tests probably failed to cover something. Re-read feedback before adding more tests.
 
 ## Required outputs
@@ -63,24 +63,38 @@ Given the design, the implementer's changes, and the current code state, write t
 
 Every new test that covers an acceptance criterion or a bugfix must be shown to **fail against the pre-change code**. A test that also passes without the implementation proves nothing — it certifies whatever the code happens to do.
 
+**Which ref you prove against.** Use `iter_ref` from `.happysquad/state.json` if it is set (the orchestrator records it when it re-dispatches after a FAIL — it is the state your fix was applied on top of). Otherwise use `base_ref`. On a fix iteration, `base_ref` is the wrong ref: the whole feature usually fatals there, which re-proves iteration 1 and says nothing about the fix.
+
 Mechanism (safe for parallel runs — never `git stash`; a stash would clobber sibling workstreams' uncommitted work):
 
-1. `git worktree add .happysquad/tmp/red-<workstream-or-run-id> <base_ref>`
-2. Copy your new/changed test files (plus any new fixtures they need) to the same relative paths inside that worktree.
-3. Run **only those tests** there. Expected outcome: fail — a failing assertion, or a compile/import error because the feature's files don't exist at `base_ref` (that counts too: it proves the test exercises the new code).
+1. `git worktree add .happysquad/tmp/red-<workstream-or-run-id> <ref>`
+2. Copy your new/changed test files (plus any new fixtures they need) to the same relative paths inside that worktree. Dependencies and env files the runner needs (`vendor/`, `node_modules/`, `.env.testing`) are gitignored and will not be there — copy or symlink them too.
+3. Run **only those tests** there. Expected outcome: fail.
 4. `git worktree remove --force .happysquad/tmp/red-<...>` when done.
-5. Record the results in test-report.md:
+5. Record the results in test-report.md, **one row per test**, with the kind of red:
 
 ```markdown
 ## Red→green evidence
 
-| Test | At base_ref (red) | Now (green) |
-|------|-------------------|-------------|
-| CreateApiKeyTests.RejectsExpiredKey | FAIL — expected 401, got 200 | PASS |
-| api.test.ts › returns 404 for foreign tenant | FAIL — module ./api-keys not found at base | PASS |
+Ref proved against: `<iter_ref | base_ref>` (`<sha>`)
+
+| Test | Kind | At ref (red) | Now (green) |
+|------|------|--------------|-------------|
+| CreateApiKeyTests.RejectsExpiredKey | assertion | FAIL — expected 401, got 200 | PASS |
+| api.test.ts › returns 404 for foreign tenant | compile | ERROR — module ./api-keys not found at ref | PASS |
 ```
 
-If a test **passes** at `base_ref`, it is tautological — rewrite it until it goes red before signaling TESTS_READY. If the repo can't build at `base_ref` for unrelated reasons (or `base_ref` is null in a fresh repo), record the check as `not-runnable` with the reason; the reviewer decides whether to accept it. Pre-existing tests you merely updated for a signature change don't need red proof.
+`Kind` is one of:
+
+- **`assertion`** — the test ran and an assertion failed. This is the only kind that proves the test *discriminates*: that it pins the specific behaviour, not merely the existence of the code.
+- **`compile`** — the test could not run (missing module, missing class, import/compile error) because the feature's files do not exist at the ref. It counts as red — it proves the test exercises new code — but it proves nothing about which behaviour the test pins. A test that asserts the wrong invariant produces exactly this result.
+- **`not-runnable`** — the repo cannot build at the ref for unrelated reasons, or the ref is null in a fresh repo. Give the reason. The reviewer decides whether to accept it.
+
+**If every row is `compile`, say so in one line under the table** — e.g. *"All 17 rows are compile-red: no test in this slice has been shown to discriminate."* This is not a failure and does not block; it tells the reviewer that discrimination is unproven and the TEST axis must be judged on the tests' content instead. Where a mutation is cheap (flip a comparison, move a predicate, drop a filter) and would upgrade a row to `assertion`, do it and record the mutant.
+
+**Never write a row you did not run.** If the ref is unavailable or the run was not performed, the row is `not-runnable` with the reason. A reasoned prediction of what would have failed is not evidence, and is rejected at the evidence gate.
+
+If a test **passes** at the ref, it is tautological — rewrite it until it goes red before signaling TESTS_READY. Pre-existing tests you merely updated for a signature change don't need red proof.
 
 ## What you must NOT do
 

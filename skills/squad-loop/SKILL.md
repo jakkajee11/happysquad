@@ -61,6 +61,7 @@ Orchestrator maintains `.happysquad/state.json` (or `.happysquad/runs/<run-id>/s
   "run_id": "20260520-103045-add-api-key-auth",
   "task": "<one-line task description>",
   "base_ref": "<git rev-parse HEAD at run start — null if the repo has no commits>",
+  "iter_ref": null,
   "mode": "parallel",
   "parent_fleet_id": null,
   "worktree": null,
@@ -149,7 +150,7 @@ When invoked:
    - If present → nothing to do; it is already in context.
    - If absent AND `.happysquad/.claude-md-nudged` does not exist → tell the user once: "No CLAUDE.md found — the squad runs better with one (project conventions, build/test commands, code style). Agents read it automatically." Then AskUserQuestion: "Generate one now (runs /init), then continue" / "Continue without — don't ask again" / "Continue without — ask next time". Honor the answer: on generate, run `/init` then continue; on don't-ask-again, write `.happysquad/.claude-md-nudged` and continue; on ask-next-time, continue without writing the marker. Never block the loop on this — it is advisory.
 5. Generate `run_id` = `YYYYMMDD-HHMMSS-<slug-of-first-6-task-words>`.
-6. Create `.happysquad/runs/<run-id>/`.
+6. Create `.happysquad/runs/<run-id>/` and its `markers/` subdirectory.
 7. Load or create `.happysquad/state.json` and `.happysquad/config.json`.
 8. Record `base_ref` = `git rev-parse HEAD` in state.json (`null` if the repo has no commits yet), and note a dirty tree if `git status --porcelain` is non-empty. Every "changed since loop start" diff, the conflict gate, and the tester's red→green proof measure against this ref.
 9. Set `current_state = ARCHITECT`, `iteration = 1`.
@@ -167,10 +168,30 @@ For each state, do this in order:
    - the run's `base_ref` (the tester needs it for the red→green proof)
    - the model from the effective config (config.json merged with approved team-plan overrides)
    - **the per-agent skill list from `stack-profile.json`** (under `recommended_skills.<agent-name>`) so the agent loads the right stack-specific skills at the start of its run
-3. Wait for the agent's completion marker line (malformed/missing → see "Marker protocol & failure handling").
+   - **a `marker_file`** — `.happysquad/runs/<run-id>/markers/<STATE>-i<N>-<agent>[-<workstream>].txt` — with the instruction: "As your last action, write your completion marker line to `<marker_file>`, then end with the same line as your final message." Delete any existing file at that path before dispatch, so a retry never reads the previous attempt's marker.
+3. **Wait for the completion marker in this turn.** Never end your turn while a dispatch is outstanding. An orchestrator that ends its turn ("Tester running.") depends on a completion notification to wake it; when that notification is missed, the run stalls with the work done and nothing notices. The only mid-loop stop is the context checkpoint, and it happens between states.
+   - The Agent tool returned the agent's final message → read the marker from it.
+   - The Agent tool returned an async handle (agents can run async even without `run_in_background`) → poll the marker file(s) with a foreground Bash call (`timeout: 600000`), and repeat the call while it prints `WAITING`. A parallel wave or a specialist batch polls all its marker files in one loop. If the agent's result arrives between poll calls, use it and stop polling.
+
+     ```bash
+     RUN=.happysquad/runs/<run-id>
+     for i in $(seq 30); do            # ~5 min per call
+       touch "$RUN/.orchestrator"
+       ok=1; for m in <marker_file ...>; do [ -s "$m" ] || ok=0; done
+       [ $ok = 1 ] && { cat <marker_file ...>; exit 0; }
+       sleep 10
+     done
+     echo WAITING
+     ```
+
+   - No marker 90 minutes after dispatch → stop the agent if the runtime gave a handle, then treat it as "Agent error / death".
+
+   Malformed or missing marker → see "Marker protocol & failure handling". This wait governs every Agent dispatch in this skill (§5, §6, §9, §10a).
 4. For IMPLEMENT/TEST states, run the **evidence gate** (§3) on the marker's claims. Never transition on an unverified claim.
 5. Append an entry to `history` in state.json, including the gate's `verified` values when present.
 6. Transition per the rules below.
+
+**Heartbeat.** The poll loop touches `.happysquad/runs/<run-id>/.orchestrator` every 10 seconds. External watchdogs read it separately from the agents' own output: a fresh `.orchestrator` means the orchestrator is alive and waiting on a slow agent; a stale one while `current_state` is not `COMPLETE`/`BLOCKED` means the orchestrator stopped — run `/squad-resume`.
 
 ### 3. Evidence gate
 
@@ -186,7 +207,19 @@ Completion markers are **claims, not facts**. Verify every claim against evidenc
 
 1. Re-run the exact test command(s) recorded in test-report.md (workstream-scoped in parallel mode). Compare the real exit code and pass/fail counts against the claimed `status`.
 2. Read coverage from the coverage tool's report file — the tester records its path in test-report.md (e.g. `coverage/coverage-summary.json`, `coverage.xml`, `lcov.info`). The verified number from that file is what the REVIEW coverage gate uses; the marker's `coverage=` field is only a claim. No report file → record coverage as `"unverified"` (a TEST finding for the reviewer, not a silent pass).
-3. Confirm test-report.md contains the `## Red→green evidence` section covering the new AC/bugfix tests (see the tester agent). A missing section — or any test recorded as *passing* at `base_ref` — means the tests don't prove the change: write the discrepancy to feedback.md, `iteration += 1`, re-dispatch the tester.
+3. Confirm test-report.md contains the `## Red→green evidence` section covering the new
+   AC/bugfix tests (see the tester agent). Reject and re-dispatch — write the discrepancy to
+   feedback.md, `iteration += 1` — when any of these hold:
+   - the section is missing;
+   - any test is recorded as *passing* at the ref;
+   - the section has no `Kind` column, or a row's `Kind` is absent;
+   - a row is `assertion` or `compile` but the tester ran no proof — no worktree run is
+     evidenced and `test-output.txt` has no corresponding failure. A described or predicted
+     red is not a red; the honest value is `not-runnable`;
+   - `iter_ref` is set in state.json and the report proves against `base_ref` instead.
+
+   Record `"red_kinds": { "assertion": <n>, "compile": <n>, "not_runnable": <n> }` in the
+   history entry. All-compile is **not** a gate failure — it is a signal the reviewer reads.
 4. Record `"verified": { "tests": "<pass|fail>", "coverage": <percent | "unverified"> }` in the history entry.
 
 Evidence-gate rules:
@@ -213,10 +246,30 @@ After `PARALLEL_TEST` → next state = `CONFLICT_GATE`. Then `REVIEW`.
 After `REVIEW`:
 - If `verdict=PASS` → next state = `COMPLETE`. Exit loop, report success.
 - If `verdict=FAIL` and `next=architecter` → write reviewer's issues to `feedback.md`, `current_state = ARCHITECT`, `iteration += 1`. The architecter may revise workstreams. (Design rework never takes the inner fix loop.)
-- If `verdict=FAIL` and `next=implementer` or `next=tester` → check inner-loop eligibility (§5): if every blocker in review.md has a machine-checkable `Verify` command, run the **inner fix loop** instead of a full pipeline round. Otherwise:
+- If `verdict=FAIL` and `next=implementer` or `next=tester` → **snapshot the iteration state first** (below), then check inner-loop eligibility (§5): if every blocker in review.md has a machine-checkable `Verify` command, run the **inner fix loop** instead of a full pipeline round. Otherwise:
   - `next=implementer` and `mode=single` → `current_state = IMPLEMENT`, `iteration += 1`.
   - `next=implementer` and `mode=parallel` → `current_state = PARALLEL_IMPLEMENT`, but **only re-dispatch the workstreams listed in the reviewer's `workstreams` field** (subset re-dispatch). `iteration += 1`.
   - `next=tester` → analogous to implementer.
+
+#### Iteration snapshot — on every FAIL routed to implementer/tester
+
+Before the fix is applied, capture the current working tree (including untracked files) as a
+dangling commit, without touching the working tree, the index, or the stash:
+
+```bash
+IDX=$(mktemp -u)
+TREE=$(GIT_INDEX_FILE="$IDX" sh -c 'git add -A >/dev/null && git write-tree')
+ITER_REF=$(git commit-tree "$TREE" -p HEAD -m "run <run-id> iteration <n> snapshot")
+rm -f "$IDX"
+```
+
+Record `"iter_ref": "<sha>"` in state.json (overwrite the previous one; only the most recent
+matters). The tester proves the next iteration's red against this ref.
+
+`git add -A` against a temporary index honours `.gitignore`, so dependency trees are excluded
+exactly as they are in a `base_ref` worktree. The commit is unreachable and will be collected
+by `git gc` eventually — far beyond the lifetime of a loop iteration, and it is re-taken on
+every FAIL.
 
 #### Convergence check — on every FAIL, before routing
 
@@ -463,11 +516,17 @@ Writes `runs/<run-id>/reviews/external.md` headed `ADVISORY — external model`.
 
 ## Marker protocol & failure handling
 
-The completion marker is the hand-off contract. Three failure modes, one protocol each — never improvise:
+The completion marker is the hand-off contract. Four failure modes, one protocol each — never improvise:
 
 - **Malformed or missing marker.** The agent finished but its final message doesn't match the expected marker format, or the marker names an artifact file that doesn't exist on disk. Do not guess the fields. Re-dispatch the same agent once with: "Your final message must be exactly one line matching `<expected format>` — your artifact file `<path>` {exists|is missing}; finish accordingly." If the second attempt is also malformed → log `{"result": "marker-failure"}` in history and treat the state as FAILED: write feedback.md describing what's missing, `iteration += 1`, route per the normal rules.
 - **Agent error / death.** The Agent tool call errors or returns nothing. Retry the dispatch once, verbatim. A second failure → BLOCKED protocol (§10) with the error captured in BLOCKED.md — an infrastructure failure isn't fixable by looping. Exception: if the error is a rate-limit/overload signal (`429`, `529`, "overloaded", "rate limit") AND `state.json.team_plan.external_executors.roles.quota_fallback.enabled` is true AND the current phase is in its `allowed_phases`, don't go to BLOCKED after `retry_threshold` such failures — apply §11c (quota fallback) instead.
 - **Marker/evidence contradiction.** The marker claims READY but the evidence gate (§3) disproves it — already handled by §3 (feedback + re-dispatch). Evidence always overrides the marker.
+- **Orchestrator not resumed.** The agent finished but the orchestrator ended its turn before consuming the result, so no transition happened: `current_state` is unchanged, there is no `BLOCKED.md` and no history entry for this state and iteration, yet the phase's output is on disk. §2 step 3 prevents this; when it happens anyway, recover on resume **without re-dispatching the phase**. Check before writing anything to the state file:
+  1. The state's `marker_file` exists → consume it.
+  2. No marker file, and the state's artifact (Per-state contract table) changed in the last 10 minutes (`find <artifact> -mmin -10`) → the agent may still be running. Poll per §2 step 3 until a marker appears or the artifact has been quiet for 10 minutes, then re-check.
+  3. No marker file (runs from before marker files), and the artifact is newer than the state file (`[ <artifact> -nt <state.json> ]` — the state file was last written at dispatch) and holds every field the marker needs (`verdict`/`next`/`workstreams` from review.md, `status`/`coverage` from test-report.md) → rebuild the marker from the artifact and log `"result": "recovered-from-artifact"` in the history entry. A missing field means the phase didn't finish → re-dispatch as normal.
+
+  Then continue at §2 step 4. The evidence gate re-runs the build and tests, so a recovered marker is verified like any other claim. Parallel states: apply per workstream whose status isn't `complete`.
 
 One retry, then escalate. Two identical failures in a row means the problem is systemic (prompt, environment, permissions) — further retries burn tokens without producing new information.
 
@@ -565,6 +624,6 @@ The squad's on-disk state is what makes this safe: cross-session resume (below) 
 If `.happysquad/state.json` exists and `current_state` is not `COMPLETE` or `BLOCKED` when the orchestrator starts:
 
 1. Ask the user: "An in-progress run exists for `<task>` (iteration <N>, last state <STATE>). Resume, restart, or start a new task?"
-2. On Resume: pick up at the state recorded in state.json.
+2. On Resume: run the "Orchestrator not resumed" check (Marker protocol) first — if the current phase's output is on disk, continue from it. Otherwise pick up at the state recorded in state.json.
 3. On Restart: archive the old run dir to `.happysquad/runs/<run-id>-abandoned-<timestamp>/` and start fresh.
 4. On New task: start fresh with a new run-id.
