@@ -13,3 +13,6 @@ __pycache__/
 
 # local coverage output (evals/cov.py)
 coverage/
+
+# bench raw outputs (streams are large); summaries are copied into tasks.md
+evals/bench/results/
