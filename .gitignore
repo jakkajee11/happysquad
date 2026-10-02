@@ -11,8 +11,8 @@
 __pycache__/
 *.pyc
 
-# local coverage output (evals/cov.py)
-coverage/
+# local coverage output (evals/cov.py) — anchored so evals/fixtures/coverage/ stays tracked
+/coverage/
 
 # bench raw outputs (streams are large); summaries are copied into tasks.md
 evals/bench/results/

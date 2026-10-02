@@ -10,12 +10,13 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN="$(cd "$HERE/../.." && pwd)"
 TASK="${1:?task id B1..B5}"; ENGINE="${2:?engine 0.16|hs}"; shift 2
-BUDGET=8; MODEL=sonnet; KEEP=0
+BUDGET=8; MODEL=sonnet; KEEP=0; RESUME=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --budget) BUDGET="$2"; shift 2;;
     --model) MODEL="$2"; shift 2;;
     --keep) KEEP=1; shift;;
+    --resume) RESUME="$2"; shift 2;;   # existing worktree from a killed run; 0.16 only
     *) echo "unknown arg $1"; exit 2;;
   esac
 done
@@ -24,16 +25,23 @@ done
 TEXT="$(python3 "$HERE/task_text.py" "$TASK")" || { echo "task $TASK not found in tasks.md"; exit 2; }
 
 TS="$(date -u +%Y%m%d-%H%M%S)"
-OUT="$HERE/results/$TASK-$ENGINE-$TS"; mkdir -p "$OUT"
-WT="$(mktemp -d /tmp/hs-bench-XXXXXX)"
-BASE="$(git -C "$PLUGIN" rev-parse HEAD)"
-git -C "$PLUGIN" worktree add -q --detach "$WT" "$BASE"
-# local, gitignored config travels with the worktree
-mkdir -p "$WT/.happysquad"
-cp "$PLUGIN/.happysquad/config.json" "$WT/.happysquad/config.json"
-cp "$PLUGIN/.happysquad/stack-profile.md" "$PLUGIN/.happysquad/stack-profile.json" "$WT/.happysquad/" 2>/dev/null || true
-# 0.16 reads models from config.json; hs reads them too. Force the bench model on both.
-python3 - "$WT/.happysquad/config.json" "$MODEL" <<'PY'
+if [ -n "$RESUME" ]; then
+  [ -d "$RESUME/.happysquad" ] || { echo "no .happysquad in $RESUME"; exit 2; }
+  [ "$ENGINE" = "0.16" ] || { echo "--resume is implemented for engine 0.16 only"; exit 2; }
+  WT="$RESUME"
+  BASE="$(git -C "$WT" rev-parse HEAD)"
+  OUT="$HERE/results/$TASK-$ENGINE-$TS-resume"; mkdir -p "$OUT"
+else
+  OUT="$HERE/results/$TASK-$ENGINE-$TS"; mkdir -p "$OUT"
+  WT="$(mktemp -d /tmp/hs-bench-XXXXXX)"
+  BASE="$(git -C "$PLUGIN" rev-parse HEAD)"
+  git -C "$PLUGIN" worktree add -q --detach "$WT" "$BASE"
+  # local, gitignored config travels with the worktree
+  mkdir -p "$WT/.happysquad"
+  cp "$PLUGIN/.happysquad/config.json" "$WT/.happysquad/config.json"
+  cp "$PLUGIN/.happysquad/stack-profile.md" "$PLUGIN/.happysquad/stack-profile.json" "$WT/.happysquad/" 2>/dev/null || true
+  # 0.16 reads models from config.json; hs reads them too. Force the bench model on both.
+  python3 - "$WT/.happysquad/config.json" "$MODEL" <<'PY'
 import json, sys
 p, m = sys.argv[1], sys.argv[2]
 c = json.load(open(p))
@@ -41,10 +49,11 @@ c["models"] = {"architecter": m, "implementer": m, "tester": m, "reviewer": m, "
 c.setdefault("cap", 3); c["interactive"] = False
 json.dump(c, open(p, "w"), indent=2)
 PY
+fi
 
 case "$ENGINE" in
   0.16)
-    PROMPT="/happysquad:happysquad-loop $TEXT"
+    if [ -n "$RESUME" ]; then PROMPT="/happysquad:squad-resume"; else PROMPT="/happysquad:happysquad-loop $TEXT"; fi
     SYS="You are running unattended. Wherever a skill tells you to ask the user (AskUserQuestion, yes/no offers, resume/restart prompts, wiki ingest offers, CLAUDE.md nudges, stack-profile refresh), do NOT ask: pick the recommended or default option and continue. Never end your turn while an agent you dispatched is still running."
     ;;
   hs)
