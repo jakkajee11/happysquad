@@ -3,3 +3,10 @@
 
 # OS
 .DS_Store
+
+# happysquad operational state (runs, brainstorms, stack profile) — written by hs / skills
+.happysquad/
+
+# python
+__pycache__/
+*.pyc

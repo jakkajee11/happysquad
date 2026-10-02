@@ -1,0 +1,13 @@
+{
+  "_expect": "BLOCKED",
+  "_expect_cause": "validation",
+  "ARCHITECT-i1": {
+    "out": {"phase": "ARCHITECT", "size": "S", "design": "design.md", "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}]}
+  },
+  "ARCHITECT-i1-r1": {
+    "out": {"phase": "ARCHITECT", "size": "S", "design": "design.md", "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}]}
+  },
+  "ARCHITECT-i1-r2": {
+    "out": {"phase": "ARCHITECT", "size": "S", "design": "design.md", "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}]}
+  }
+}

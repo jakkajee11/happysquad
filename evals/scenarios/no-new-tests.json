@@ -1,0 +1,10 @@
+{
+  "_expect": "COMPLETE",
+  "TEST-i1": {
+    "out": {
+      "phase": "TEST", "workstream": null, "test_cmds": [], "coverage_report": null,
+      "test_files": [], "new_tests": [], "ac_map": {"AC-1": ["test/calc.test.js::add"]}, "findings": []
+    },
+    "redgreen": {"rows": []}
+  }
+}

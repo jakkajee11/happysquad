@@ -1,0 +1,25 @@
+{
+  "_expect": "COMPLETE",
+  "IMPLEMENT-i1": {
+    "out": {"phase": "IMPLEMENT", "workstream": null, "files": ["src/calc.js"], "build_cmds": [], "unmet_ac": []},
+    "files": {
+      "src/calc.js": "export function add(a, b) {\n  return a + b;\n}\n\nexport function sub(a, b) {\n  return a - b;\n}\n\nexport function mul(a, b) {\n  return a + b;\n}\n"
+    }
+  },
+  "TEST-i1": {
+    "out": {
+      "phase": "TEST", "workstream": null, "test_cmds": [], "coverage_report": null,
+      "test_files": ["test/mul.test.js"], "new_tests": ["test/mul.test.js"],
+      "ac_map": {"AC-1": ["test/mul.test.js::mul"]},
+      "findings": [{"ac": "AC-1", "desc": "mul returns a+b"}]
+    },
+    "files": {
+      "test/mul.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { mul } from \"../src/calc.js\";\n\ntest(\"mul\", () => {\n  assert.equal(mul(3, 4), 12);\n});\n"
+    },
+    "redgreen": {"rows": [{"test": "test/mul.test.js", "kind": "compile", "evidence": "SyntaxError: The requested module does not provide an export named 'mul'"}]}
+  },
+  "REVIEW-i1": {
+    "out": {"phase": "REVIEW", "mode": "single", "report": "review.md", "findings": []},
+    "artifacts": {"review.md": "# Review\n\nClean.\n"}
+  }
+}

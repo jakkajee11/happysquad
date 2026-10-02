@@ -1,0 +1,12 @@
+{
+  "_expect": "COMPLETE",
+  "REVIEW-i1": {
+    "out": {
+      "phase": "REVIEW", "mode": "single", "report": "review.md",
+      "findings": [
+        {"id": "F-1", "severity": "blocker", "tag": "REQ", "file": "src/calc.js", "desc": "mul AC not fully satisfied", "route": "implementer", "verify": "manual"}
+      ]
+    },
+    "artifacts": {"review.md": "# Review\n\nBlocker: mul AC not fully satisfied.\n"}
+  }
+}

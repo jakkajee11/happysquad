@@ -1,0 +1,16 @@
+{
+  "_expect": "BLOCKED",
+  "_expect_cause": "gate",
+  "IMPLEMENT-i1": {
+    "out": {"phase": "IMPLEMENT", "workstream": null, "files": ["src/calc.js"], "build_cmds": [], "unmet_ac": []},
+    "files": {
+      "src/calc.js": "export function add(a, b) {\n  return a + b;\n}\n\nexport function sub(a, b) {\n  return a - b;\n}\n\nexport function mul(a, b) {\n  return a * b;\n"
+    }
+  },
+  "IMPLEMENT-i1-r1": {
+    "out": {"phase": "IMPLEMENT", "workstream": null, "files": ["src/calc.js"], "build_cmds": [], "unmet_ac": []},
+    "files": {
+      "src/calc.js": "export function add(a, b) {\n  return a + b;\n}\n\nexport function sub(a, b) {\n  return a - b;\n}\n\nexport function mul(a, b) {\n  return a * b;\n"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "_expect": "BLOCKED",
+  "_expect_cause": "convergence",
+  "REVIEW": {
+    "out": {
+      "phase": "REVIEW", "mode": "single", "report": "review.md",
+      "findings": [
+        {"id": "F-1", "severity": "blocker", "tag": "REQ", "file": "src/calc.js", "desc": "mul AC never satisfied", "route": "implementer", "verify": "manual"}
+      ]
+    },
+    "artifacts": {"review.md": "# Review\n\nBlocker: mul AC never satisfied.\n"}
+  }
+}

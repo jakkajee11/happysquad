@@ -1,0 +1,20 @@
+{
+  "_expect": "COMPLETE",
+  "ARCHITECT-i1": {
+    "out": {
+      "phase": "ARCHITECT",
+      "size": "S",
+      "design": "design.md",
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}]
+    }
+  },
+  "ARCHITECT-i1-r1": {
+    "out": {
+      "phase": "ARCHITECT", "size": "S", "design": "design.md", "assumptions": [],
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}],
+      "workstreams": [{"name": "main", "owned": ["src/calc.js"], "depends_on": [], "ac": ["AC-1"]}],
+      "test_owned": {"main": ["test/mul.test.js"]}
+    },
+    "artifacts": {"design.md": "# Design\n\nAC-1: mul(a,b) returns a*b.\n\nFiles: src/calc.js, test/mul.test.js\n"}
+  }
+}

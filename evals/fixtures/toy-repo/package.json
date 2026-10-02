@@ -1,0 +1,10 @@
+{
+  "name": "hs-toy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --check src/calc.js && node --check src/slow.js",
+    "test": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --test-timeout=600000 'test/*.test.js'"
+  }
+}
