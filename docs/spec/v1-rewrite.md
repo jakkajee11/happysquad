@@ -1,8 +1,8 @@
 # happysquad v1.0 — rewrite spec
 
-Status: DRAFT v2 (2026-10-02, post-brainstorm `20261002-225930-bs-v1-rewrite-spec-review`, full-consensus after amendment) · Owner: พี่จี · Baseline: happysquad 0.16.2
+Status: DRAFT v3 (2026-10-02, post-brainstorm `20261002-225930-bs-v1-rewrite-spec-review`, full-consensus after amendment, + 4 owner decisions) · Owner: พี่จี · Baseline: happysquad 0.16.2
 
-v2 รวม amendment A1 (7 ข้อ), defer list A2, phase ใหม่ A3 และ reviewer notes จาก brainstorm เข้าเนื้อหาแล้ว ไม่มี patch list แยก
+v2 รวม amendment A1 (7 ข้อ), defer list A2, phase ใหม่ A3 และ reviewer notes จาก brainstorm v3 เพิ่มการตัดสินใจของพี่จี 4 ข้อ: Q1 ปิด (refactor COMPLETE ได้), Q2 ปิด (headless ใช้ isolated worktree เป็น default), agent command ต้องตรง config แบบ prefix เต็ม, P1 แยกเป็น P1a/P1b, และ hs เป็น package หลายไฟล์
 
 ## 0. ทำไมต้องรื้อ
 
@@ -75,7 +75,22 @@ benchmark = toy repo + 1 repo จริง, 5 งาน ตัวเลขทุ
 ```
 happysquad/
 ├── .claude-plugin/plugin.json          # description ประโยคเดียว
-├── bin/hs                              # python3 ≥ 3.9 stdlib, executable, ไฟล์เดียว
+├── bin/hs                              # entry: sys.path insert + hs.cli.main()
+├── hs/                                 # python3 ≥ 3.9 stdlib package, ไม่มี dependency
+│   ├── cli.py                          # argparse, subcommand dispatch, JSON output
+│   ├── config.py                       # defaults, schema, effective config
+│   ├── state.py                        # state.json / events.jsonl, flock, atomic write
+│   ├── schemas.py                      # out.json schemas (source of truth), validate
+│   ├── machine.py                      # transitions, routing, verdict, convergence, iteration table
+│   ├── gates.py                        # build / test / conflict / verify, _gates runner
+│   ├── coverage.py                     # 4 parsers
+│   ├── redgreen.py                     # worktree + classify
+│   ├── provenance.py                   # command allowlist, shlex, subprocess wrapper
+│   ├── gitutil.py                      # snapshot, refs, diff pathspec, prune/sweep
+│   ├── render.py                       # prompt templates
+│   ├── drivers.py                      # agent-tool action loop, headless, fake (HS_CLAUDE)
+│   ├── fleet.py                        # P4
+│   └── hooks.py                        # session-start / stop
 ├── agents/
 │   ├── architecter.md                  # ≤ 900 คำ
 │   ├── implementer.md                  # ≤ 600
@@ -89,7 +104,7 @@ happysquad/
 ├── references/
 │   ├── axis-sec.md  axis-perf.md
 │   ├── risk-patterns.json
-│   ├── out-schemas.json                # schema เดียวกับที่ฝังใน hs (hs เป็น source of truth; ไฟล์นี้ generate)
+│   ├── out-schemas.json                # generate จาก hs/schemas.py (hs เป็น source of truth)
 │   └── design-template.md  design-template-lite.md
 ├── skills/  squad-loop  fleet  brainstorm  stack-detector  dev-wiki
 ├── commands/                           # §14
@@ -137,7 +152,7 @@ Run directory (hs เขียนทั้งหมด ยกเว้น `confi
 
 ## 4. `hs` CLI contract
 
-python3 ≥ 3.9 stdlib เท่านั้น ทุกคำสั่งพิมพ์ JSON บรรทัดเดียวบน stdout เว้นแต่ระบุ exit 0 = สำเร็จ, 1 = gate/validation fail (เป็นผลลัพธ์ปกติ), 2 = usage/IO error ทุกคำสั่งรับ `--run <id>` (default: `.happysquad/current`)
+python3 ≥ 3.9 stdlib เท่านั้น เป็น package `hs/` หลายไฟล์ (§3) โดย `bin/hs` เป็น entry บรรทัดเดียว ไม่ใช่ไฟล์เดียว 2,500 บรรทัด เหตุผล: unit test ต่อ module, import ได้จาก `test_hs.py` โดยไม่ต้อง subprocess ทุกเคส ไม่เพิ่ม dependency ทุกคำสั่งพิมพ์ JSON บรรทัดเดียวบน stdout เว้นแต่ระบุ exit 0 = สำเร็จ, 1 = gate/validation fail (เป็นผลลัพธ์ปกติ), 2 = usage/IO error ทุกคำสั่งรับ `--run <id>` (default: `.happysquad/current`)
 
 | คำสั่ง | ทำอะไร | เขียนอะไร |
 |---|---|---|
@@ -251,7 +266,7 @@ schema ฝังใน hs เป็น dict เดียว ใช้ทั้�
  "ownership_gap":null}
 ```
 
-`build_cmds` เป็นส่วน **เพิ่ม** จาก `config.build_cmd` (gate รัน config ก่อนเสมอ) และต้องผ่านกฎ provenance (§7.0) `ownership_gap: {"file","reason"}` หรือ `design_conflict: "<text>"` → route ARCHITECT พร้อม feedback hs ตรวจว่า `files` ⊆ owned และ (single run) diff ⊆ owned
+`build_cmds` เป็นส่วน **เพิ่ม** จาก `config.build_cmd` (gate รัน config ก่อนเสมอ) และต้องผ่านกฎ provenance (§7.0): ต้องเป็น config command แบบ prefix เต็ม + argument เพิ่ม (เช่น `pnpm lint` ผ่านก็ต่อเมื่อ config มี `pnpm lint` หรือ `pnpm`-prefixed command ที่ขยายได้ตามกฎ) ส่วนใหญ่ของ v1.0 คาดว่า `build_cmds` จะว่าง `ownership_gap: {"file","reason"}` หรือ `design_conflict: "<text>"` → route ARCHITECT พร้อม feedback hs ตรวจว่า `files` ⊆ owned และ (single run) diff ⊆ owned
 
 ### 6.3 TEST (ต่อ workstream)
 
@@ -270,7 +285,7 @@ schema ฝังใน hs เป็น dict เดียว ใช้ทั้�
 - `test_cmds` เพิ่มจาก `config.test_cmd`; `coverage_report` null = ใช้ config
 - tester ต้องเรียก `{{hs}} redgreen --ref {{proof_ref}} --tests <new_tests>` เอง (hs ทำ worktree ทั้งหมด)
 - `ac_map` ต้องครอบคลุมทุก AC ของ workstream ที่ไม่อยู่ใน `untestable` (จาก ARCHITECT หรือ TEST) ไม่งั้น validation fail
-- `new_tests` ว่างได้ (refactor/docs) → hs inject TEST **major** "no red-first proof" ให้ reviewer ตัดสิน (ดู Q1 §20)
+- `new_tests` ว่างได้ (refactor/docs/config) → hs inject TEST **major** "no red-first proof" ให้ reviewer ตัดสิน **Q1 ปิดแล้ว:** run แบบนี้ COMPLETE ได้ถ้า reviewer ไม่ยกเป็น blocker ไม่งั้น lite path สำหรับ docs/config ไม่มีวันจบ reviewer ยก major นี้เป็น blocker ได้เมื่อเห็นว่า diff เปลี่ยน behaviour ที่ควรมี test (ระบุใน `agents/reviewer.md`)
 
 ### 6.4 REVIEW (chief) และ SPECIALIST
 
@@ -294,7 +309,7 @@ schema ฝังใน hs เป็น dict เดียว ใช้ทั้�
 | tests | `config.test_cmd` (full suite) exit 0 | REQ blocker → implementer, `verify = config.test_cmd` |
 | coverage | per-file ของ `IMPLEMENT.files` ≥ threshold (inclusive); `coverage_threshold: null` → ข้าม term | ต่ำกว่า → TEST blocker → tester; status `unsupported` (ไม่มี parser) → ข้าม term + TEST major; status `unparseable` → gate fail, re-dispatch tester |
 | redgreen | ทุกแถวของ `new_tests` มี, `ref == proof_ref`, ไม่มีแถว `green` | TEST blocker → tester |
-| `new_tests` ว่าง | อนุญาต | TEST major "no red-first proof" (reviewer escalate ได้) |
+| `new_tests` ว่าง | อนุญาต (Q1 ปิด: refactor/docs/config COMPLETE ได้) | TEST major "no red-first proof"; reviewer ยกเป็น blocker ได้เมื่อ diff เปลี่ยน behaviour |
 | specialist blockers | union เข้า verdict | ถอดได้เฉพาะผ่าน chief `overrides[{id,reason}]` |
 | reviewer blockers | ไม่มี | FAIL, route ตาม finding |
 
@@ -308,9 +323,14 @@ SPECIALIST: `{"phase":"SPECIALIST","axis":"sec|perf","report":"sec.md","findings
 
 - `config.build_cmd`, `config.test_cmd`, `config.coverage_report` seed โดย `hs init` จาก stack-detector เป็น **authoritative** gate รันเสมอ seed ผิด → BLOCKED cause=gate ที่ gate แรก user แก้ `config.json` แล้ว resume
 - `test_cmd` null ตอน `run start` → `ask` (interactive) หรือ BLOCKED cause=config **ก่อน** ARCHITECT (ไม่เสียเงิน)
-- command จาก agent (`build_cmds`, `test_cmds`, `verify`) เป็นส่วนเพิ่มเท่านั้น รันด้วย `shlex.split` + `shell=False` และรับเฉพาะเมื่อ argv[0] อยู่ใน allowlist: argv[0] ของ config command, `grep`, `rg`, `test` leading `!` hs จัดการเอง
-- **reject เสมอ** แม้ argv[0] ตรง config: `sh`, `bash`, `zsh`, `env`, `xargs`, `npx`, `pnpm dlx`, `npm exec`, `yarn dlx` และ fetch-and-run อื่น
-- command ที่ไม่ผ่าน → event `untrusted`; `verify` กลายเป็น `manual`; `build_cmds`/`test_cmds` ถูกทิ้ง
+- command จาก agent (`build_cmds`, `test_cmds`, `verify`) เป็นส่วนเพิ่มเท่านั้น รันด้วย `shlex.split` + `shell=False` และรับเฉพาะเมื่อตรงกฎข้อใดข้อหนึ่ง (ตัดสินใจแล้ว: **prefix เต็ม ไม่ใช่แค่ argv[0]** เพราะ `pnpm` ใน allowlist จะปล่อย `pnpm exec <anything>` และ `pnpm run <script ที่ agent เพิ่มเอง>` ผ่าน):
+  1. argv ของ agent command ขึ้นต้นด้วย argv **ทั้งหมด** ของ config command ตัวใดตัวหนึ่ง (`config.build_cmd` หรือ `config.test_cmd` หลัง `shlex.split`) และ argument ที่เพิ่มต้องไม่ขึ้นต้นด้วย `-` ยกเว้นอยู่ใน `config.allowed_flags` (default: `--run`, `--filter`, `--grep`, `-t`, `-k`, `--testNamePattern`, `--coverage`) และต้องไม่มี token ใดเป็น `exec`, `run`, `dlx`, `x`, `--`, `-c`, `-e`
+  2. argv[0] ∈ {`grep`, `rg`, `test`, `[`} (สำหรับ `verify` เท่านั้น) argument เป็น literal ไม่มี `-f`/`--file`
+  3. leading `!` hs จัดการเอง (negate exit code)
+- `test_cmds` ที่ตรงกฎ 1 ใช้ได้เฉพาะเป็น scope ของ `test_cmd` (เช่น `pnpm test -- tests/auth`) gate เต็มยังรัน config เสมอ
+- **reject เสมอ** ไม่ว่าตรง prefix ไหม: token ใด ๆ เป็น `sh`, `bash`, `zsh`, `env`, `xargs`, `npx`, `pnpm dlx`, `npm exec`, `yarn dlx`, `python -c`, `node -e`, `eval`, หรือมี `|`, `;`, `&&`, `||`, `>`, `<`, `$(`, backtick (shlex ไม่ตีความอยู่แล้ว แต่ reject ให้ชัดเพื่อไม่ส่งเป็น literal arg ที่ runner อาจตีความต่อ)
+- command ที่ไม่ผ่าน → event `untrusted` พร้อมเหตุผล; `verify` กลายเป็น `manual`; `build_cmds`/`test_cmds` ถูกทิ้ง
+- ผลข้างเคียงที่ยอมรับ: `verify` ที่ซับซ้อนตกเป็น `manual` มากขึ้น → inner fix น้อยลง full round มากขึ้น แลกกับไม่มี LLM-controlled exec ใน hs
 - ทุก subprocess: `start_new_session=True`, timeout → `os.killpg`
 - **ไม่มีงานยาวใน foreground**: `advance` spawn `hs _gates <phase-dir>` แบบ detached (double-fork หรือ `Popen` + `start_new_session`) บันทึก pid ใน `state.gates` แล้วคืน `wait` `hs wait` poll จน gates file เขียนเสร็จ (atomic rename) แล้ว transition ภายใน timeout เดียวกัน (default 540s < Bash 600s) phase ที่ pid ยังมีชีวิต → `wait` ไม่ spawn ซ้ำ
 
@@ -512,7 +532,9 @@ dispatch prompt ≤ 200 คำ: บทบาท, input paths, output (artifact +
     --disallowedTools "<config.headless.disallowed_tools>" \
     --max-budget-usd <config.headless.budget_per_phase>
   ```
-  `--agents`/`--agent` ทำให้ frontmatter `tools` ถูกบังคับ ไม่ใช้ `--append-system-prompt-file` ไม่ใช้ `--bare` (ตัด OAuth/keychain) `HS_CHILD=1` ทำให้ hook ของ plugin เงียบใน child wave = subprocess พร้อมกัน ≤ `max_parallel` ใช้สำหรับ overnight, CI, fleet children **Q2 (§20) ตัดสินว่า headless รันบน working tree จริงหรือ isolated worktree** reviewer แนะนำ worktree เป็น default
+  `--agents`/`--agent` ทำให้ frontmatter `tools` ถูกบังคับ ไม่ใช้ `--append-system-prompt-file` ไม่ใช้ `--bare` (ตัด OAuth/keychain) `HS_CHILD=1` ทำให้ hook ของ plugin เงียบใน child wave = subprocess พร้อมกัน ≤ `max_parallel` ใช้สำหรับ overnight, CI, fleet children
+
+  **Isolation (Q2 ปิดแล้ว: isolated worktree เป็น default).** `headless.isolate` default `"worktree"`: `hs run start --driver headless` สร้าง `git worktree add -b hs/<run-id> <git-common-dir>/happysquad/wt/<run-id> HEAD` แล้วรัน run ทั้งหมดในนั้น (`state.worktree` set, `.happysquad/` ของ worktree เป็นของ run นี้) เมื่อ COMPLETE: `done` action มี `branch: "hs/<run-id>"` และ `suggested_merge` ไม่ auto-merge BLOCKED: worktree คงไว้ให้ inspect `headless.isolate: "none"` ต้องตั้งเองเพื่อรันบน working tree จริง deny-list เป็นชั้นเสริมเสมอ ไม่ใช่กำแพง (ตรง prefix เท่านั้น, `sh -c "git push"` ผ่าน, snapshot ไม่เห็น `.env`) worktree แบบนี้ใช้กลไกเดียวกับ fleet child (§12) จึงไม่เพิ่มโค้ด P4 มาก
 - **`fake`**: = headless ที่ `HS_CLAUDE=evals/fake_agent.py` fake binary รับ argv เดียวกัน (จึงเทส argv construction รวม deny-list ได้ที่ $0) เขียน out.json + artifacts ตาม `--scenario`
 
 ## 12. Fleet (P4)
@@ -572,17 +594,18 @@ dispatch prompt ≤ 200 คำ: บทบาท, input paths, output (artifact +
  "models":{"architecter":"opus","implementer":"sonnet","tester":"sonnet","reviewer":"opus","specialist":"opus","product":"opus"},
  "lite":{"auto":true,"cap":3},
  "build_cmd":null,"test_cmd":null,"coverage_report":null,
+ "allowed_flags":["--run","--filter","--grep","-t","-k","--testNamePattern","--coverage"],
  "generated":["**/pnpm-lock.yaml","**/package-lock.json","**/yarn.lock","**/__snapshots__/**"],
  "headless":{"budget_per_phase":2.0,
    "allowed_tools":"Read,Write,Edit,Grep,Glob,Bash",
    "disallowed_tools":["Bash(git push:*)","Bash(git reset:*)","Bash(git clean:*)","Bash(git checkout:*)","Bash(git commit:*)","Bash(rm -rf:*)","Bash(curl:*)","Bash(wget:*)","Bash(sudo:*)","Bash(gh:*)"],
-   "isolate":null},
+   "isolate":"worktree"},
  "hooks":{"stop_progress_nudge":false},
  "wiki":{"offer":true},
  "fleet":{"base_branch":null}}
 ```
 
-`coverage_threshold: null` = ไม่ gate coverage `headless.isolate`: ค่าตั้งต้นรอ Q2 key ที่ไม่รู้จัก → warning ครั้งเดียว
+`coverage_threshold: null` = ไม่ gate coverage `headless.isolate` ∈ {`worktree`, `none`} key ที่ไม่รู้จัก → warning ครั้งเดียว
 
 ### 16.2 Non-interactive defaults (`interactive=false`)
 
@@ -614,7 +637,8 @@ dispatch prompt ≤ 200 คำ: บทบาท, input paths, output (artifact +
 - redgreen classification บน toy repo: **assertion-red กับ compile-red เป็นคู่ sibling**, green, not-runnable; worktree ถูกลบเสมอรวมกรณี exception
 - `hs snapshot` ไฟล์เทสแยก: dirty tree, untracked, ignored ไม่ติด, index จริงไม่ถูกแตะ, ref pin/unpin
 - verdict truth table ทุกแถว; synthetic blocker; `overrides`; SIMPL cap; route derivation (CONFLICT, architecter, mixed)
-- provenance: allowlist, `!`, reject `sh`/`env`/`npx`/`pnpm dlx` แม้ตรง config, `build_cmds:["curl x|sh"]` ถูกทิ้ง, `untrusted` → manual
+- provenance: prefix เต็มผ่าน, argv[0] ตรงแต่ prefix ไม่ตรงถูกทิ้ง (`pnpm exec x`, `pnpm run evil`), flag นอก `allowed_flags` ถูกทิ้ง, `!`, reject `sh`/`env`/`npx`/`pnpm dlx`/`node -e` และ shell metachar, `build_cmds:["curl x|sh"]` ถูกทิ้ง, `untrusted` → manual
+- headless isolation: worktree ถูกสร้างที่ `<git-common-dir>/happysquad/wt/<run>`, run ทั้งหมดอยู่ในนั้น, working tree หลักไม่ถูกแตะ (เทียบ `git status` ก่อน/หลัง), `isolate: "none"` รันใน cwd
 - convergence: `prior_id` หลัก, fingerprint fallback, repeat 3 → architecter, repeat หลัง architecter → BLOCKED, zero-progress ×2 → BLOCKED
 - inner loop: eligible/ineligible (manual, untrusted), inner_cap, fallback
 - retry counters แยกกัน และ cause ใน BLOCKED.md
@@ -643,7 +667,8 @@ toy repo + `claude -p` headless driver 1 loop, `--max-budget-usd 3`, gate ที
 | phase | งาน | exit criteria |
 |---|---|---|
 | **P0 spike (1 วัน)** | hs ขั้นต่ำ (ARCHITECT → IMPLEMENT → COMPLETE, flock, `hs wait`) + skill 3 ขั้น; รัน `claude -p` บน toy repo ที่มี gate > 120s; สัปดาห์เดียวกัน: เก็บ baseline 0.16.2 บน bench (§18.2) | ≥ 10 dispatch ต่อเนื่องโดยไม่ช่วยมือ; baseline ครบ 7 metric; ตอบได้ว่า driver + detached gate ใช้ได้จริง ถ้าไม่ผ่าน → หยุดและทบทวน driver ก่อนทำ P1 |
-| **P1 hs core (size L)** | hs ครบตาม §4–§8, §16–§17 รวม A1 ทุกข้อ; `fake_agent.py` + 9 scenarios; `test_hs.py` ครบ §18.1 (ยกเว้น fleet); **ยังไม่เขียน verdict function จนกว่า Q1 ตอบ** | `test_hs.py` ผ่าน; fake e2e ผ่านทุก scenario; skill 0.16 ยังใช้ได้ (ไม่แตะ) |
+| **P1a hs core (size M)** | package `hs/` ตาม §3: config, state (ยังไม่ flock), schemas + `hs validate`, machine (transitions, verdict truth table — Q1 ปิดแล้ว, convergence, iteration table), coverage parsers, redgreen, snapshot/refs, render, risk, conflict, resume; gates รัน **foreground** ไปก่อน; provenance แบบ prefix เต็ม (§7.0) ตั้งแต่แรก เพราะเป็น input ของ gates; `fake_agent.py` + 9 scenarios; `test_hs.py` ทุกหัวข้อ §18.1 ยกเว้น concurrency และ detached gates | `test_hs.py` ผ่าน; fake e2e ผ่านทุก scenario; `hs` ใช้กับ toy repo ด้วยมือได้ครบ loop; skill 0.16 ยังใช้ได้ (ไม่แตะ) **ส่งมอบของที่ใช้ได้ก่อน hardening** |
+| **P1b hardening (size M)** | flock + atomic write + event-before-state + re-entrant consume; `hs _gates` detached + `hs wait` + pid tracking; `os.killpg`; `HS_NOW`; `git worktree prune` + tmp sweep; headless worktree isolation (§11); concurrency tests (kill-mid-advance, two writers, duplicate `_gates`) | concurrency tests ผ่าน; `hs wait --timeout 540` คืน action ถูกต้องเมื่อ gate > 540s; P0 spike ซ้ำด้วย P1b ผ่าน 10 dispatch |
 | **P2 driver + agents** | squad-loop SKILL.md ใหม่; 6 agent files; prompts/ รวม brainstorm/ (ชี้ brainstorm skill ไปด้วย); headless driver; smoke; seeded-bug fixture; bench run v1.0 | **dogfood gate** บน 5 งาน bench: 0 false COMPLETE; **0 manual resumes or state edits**; 0 destructive actions; BLOCKED ≤ baseline; recall ≥ baseline; แสดง $/COMPLETE เทียบ baseline; smoke COMPLETE; word budgets §9.2 |
 | **P3 cuts + ops** | เริ่มได้เมื่อ P2 gate ผ่านเท่านั้น; ย้าย §2.1 ไป `happysquad-ext` แล้วลบ; hooks ใหม่; non-interactive; lite; `.gitignore`; README/CHANGELOG; ลบ command เฉพาะที่ตัวแทนมาแล้ว; `/squad-fleet` 0.16 คงไว้ mark unsupported; tag v1.0.0-rc1 | ไม่มี AskUserQuestion เมื่อ `interactive=false` (fake + headless); `--lite` บน bug 1 ไฟล์ ≤ 4 dispatch; ทุก command ใน §14 ใช้ได้ |
 | **P4 fleet** | `hs fleet start|advance`, headless children, `--cleanup`; fleet fake e2e; tag v1.0.0 (หรือก่อน P4 ตาม Q6) | fleet fake e2e ผ่าน; `/squad-fleet` ใหม่แทน 0.16 |
@@ -658,14 +683,17 @@ toy repo + `claude -p` headless driver 1 loop, `--max-budget-usd 3`, gate ที
 - team-assembly / external executors / ask-kilo / fable escalation → `happysquad-ext`
 - รับ dissent ของ product: P2 gate นับ "manual resumes or state edits" → brainstorm เป็น full-consensus
 - python3 เป็น hard dependency; run เก่าจาก 0.16 ใช้กับ v1.0 ไม่ได้
+- **Q1 ปิด:** refactor/config/docs ที่ไม่มี failing-first test COMPLETE ได้ TEST major ถูก inject และ reviewer ยกเป็น blocker ได้เมื่อ diff เปลี่ยน behaviour (§6.3, §6.4) verdict function เขียนได้ใน P1a
+- **Q2 ปิด:** headless ใช้ isolated worktree เป็น default (`headless.isolate: "worktree"`) deny-list เป็นชั้นเสริม (§11, §16.1)
+- **Provenance ใช้ prefix เต็ม** ไม่ใช่ argv[0] (§7.0) ยอมให้ `verify` ตกเป็น `manual` มากขึ้น
+- **P1 แยกเป็น P1a (core, foreground gates, ใช้ได้จริง) และ P1b (hardening: locking, detached gates, isolation)** (§19)
+- **hs เป็น package `hs/` หลายไฟล์** `bin/hs` เป็น entry (§3, §4)
 
 ### คำถามเปิด (จาก consensus)
 
 | # | คำถาม | block อะไร |
 |---|---|---|
-| Q1 | refactor / config / docs task ที่ไม่มี failing-first test ควร COMPLETE ได้ไหม (TEST major ถูก inject, reviewer ตัดสิน) | **verdict function ใน P1** |
-| Q2 | overnight run บน working tree จริง deny-list พอไหม หรือ headless ต้องใช้ isolated worktree (reviewer แนะนำ worktree เป็น default เพราะ deny-list ตรง prefix เท่านั้น และ snapshot ไม่เห็น `.env`) | **P2** (`headless.isolate` default) |
-| Q3 | v1.0 ผูกกับวันหรือ scope อะไรยอมได้ | ขนาด P1 |
+| Q3 | v1.0 ผูกกับวันหรือ scope อะไรยอมได้ | ขนาด P1a/P1b |
 | Q4 | repo เป้าหมายใช้ coverage format และรูปแบบ repo แบบไหน (monorepo, Go, JVM) ใน `workspace:*` repo green ที่ ref ควรนับ `not-runnable` หรือยอมรับความเสี่ยง | parser scope, redgreen rule |
 | Q5 | มีคนอื่นใช้ plugin ไหม (migration note, Windows) glm/opencode offload ประหยัดจริงไหมวันนี้ | P3 docs |
 | Q6 | tag v1.0.0 ต้องรอ fleet (P4) หรือ ship หลัง P3 ได้ `/squad-drain` คงเวอร์ชัน 0.16 ถึง 1.1 หรือตัดโดยไม่มีตัวแทน | P3/P4 |
