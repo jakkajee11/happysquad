@@ -30,7 +30,7 @@ Baseline (0.16.2) and v1.0 results are appended below as they are collected.
 | B1 | 0.16.2 | COMPLETE | 1 | 4 | 0 | 0 | 0 | 5.15 | pass (cov 23.2%, 811s) |
 | B2 | 0.16.2 | COMPLETE | 1 | 4 | 0 | 0 | 0 | 5.23 | pass (cov 26.1%, 924s) |
 | B3 | 0.16.2 | COMPLETE | 2 | 5 | 0 | 0 | 0 | 6.26 | pass (cov 24.3%, 1089s) |
-| B4 | 0.16.2 | killed by harness (60 min) at i2 REVIEW — resumed, see below | 2 | 5+ | 0 | 1 | 0 | n/a (no result line) | pending |
+| B4 | 0.16.2 | COMPLETE (after harness kill + resume) | 2 | 8 | 0 | 1 | 0 | 3.29 + unknown first segment | pass (cov 22.5%, 1997s resume segment) |
 | B5 | 0.16.2 | COMPLETE | 1 | 4 | 0 | 0 | 0 | 3.91 | pass (cov 21.2%, 667s) |
 
 Baseline notes (0.16.2, sonnet on every agent, cap 3, threshold 50, all five launched in parallel 2026-10-02 18:25 UTC):
@@ -39,4 +39,7 @@ Baseline notes (0.16.2, sonnet on every agent, cap 3, threshold 50, all five lau
 - **B3 took 2 iterations** because the evidence gate rejected the tester's first red→green rows and re-dispatched the tester (not a review FAIL). Second pass: every row assertion-red.
 - **B4 iteration-1 REVIEW FAIL → architecter:** the design put the Go fixture at `evals/fixtures/coverage/coverage.out`, which the repo's unanchored `coverage/` gitignore line swallowed, so `git add` failed. That is a repo bug introduced with `evals/cov.py` (fixed: anchored to `/coverage/`). Iteration 2 redesigned to `evals/fixtures/go-cover/`, IMPLEMENT was skipped (design-only change), TEST passed, and the run was in REVIEW when the harness's 60-minute background limit killed the `claude -p` process. Resumed once with `/squad-resume` (counted as 1 manual resume). First-segment cost is unknown because the stream has no result line.
 - **Destructive-action matcher:** `rm -rf` of a `/tmp` red→green worktree is the tester's own cleanup and is not counted.
-- **Cost:** four completed runs total $20.55, above the ~$15 estimate in spec §18.2; B3's extra iteration and B2's wider diff account for most of it.
+- **B4 resume segment:** `/squad-resume` re-entered at REVIEW i2, the chief reviewer PASSed, 8 dispatches total across both segments (5 before the kill, 3 after: review re-dispatch plus two the resume protocol re-ran), $3.29 for the segment alone, 33 min. Oracle pass; `evals/fixtures/go-cover/coverage.out` plus parser and tests landed.
+- **Cost:** measured $23.84 across five runs, plus B4's unmeasured first segment (estimate $4–5 from its 682 stream lines, similar to B1/B2). Call it ≈ $28, almost double the ~$15 in spec §18.2. B3's extra iteration, B4's architecter round plus resume, and B2's wider diff account for it.
+
+**Baseline summary for the P2 dogfood gate (spec §1.2):** false COMPLETE 0/5 · manual resumes 1/5 (B4, harness-caused) · destructive 0/5 · BLOCKED 0/5 · recall: 1 scope-creep miss (B2) · $/COMPLETE ≈ $5.6 measured.
