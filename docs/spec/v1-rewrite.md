@@ -697,4 +697,4 @@ toy repo + `claude -p` headless driver 1 loop, `--max-budget-usd 3`, gate ที
 | Q4 | repo เป้าหมายใช้ coverage format และรูปแบบ repo แบบไหน (monorepo, Go, JVM) ใน `workspace:*` repo green ที่ ref ควรนับ `not-runnable` หรือยอมรับความเสี่ยง | parser scope, redgreen rule |
 | Q5 | มีคนอื่นใช้ plugin ไหม (migration note, Windows) glm/opencode offload ประหยัดจริงไหมวันนี้ | P3 docs |
 | Q6 | tag v1.0.0 ต้องรอ fleet (P4) หรือ ship หลัง P3 ได้ `/squad-drain` คงเวอร์ชัน 0.16 ถึง 1.1 หรือตัดโดยไม่มีตัวแทน | P3/P4 |
-| Q7 | bench ใช้ repo จริงตัวไหน งบ baseline ≈ $15 รับได้ไหม | P0 |
+| ~~Q7~~ | **ปิด (2026-10-03):** bench ใช้ happysquad repo เอง 5 งานบน `hs/` ใน `evals/bench/tasks.md`; coverage ผ่าน `evals/cov.py` (stdlib `trace` → lcov) เพราะไม่มี `coverage` module; threshold 50 | – |

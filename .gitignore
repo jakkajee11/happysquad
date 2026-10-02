@@ -10,3 +10,6 @@
 # python
 __pycache__/
 *.pyc
+
+# local coverage output (evals/cov.py)
+coverage/
