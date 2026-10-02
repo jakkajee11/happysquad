@@ -146,12 +146,31 @@ Respect `max_parallel`. The orchestrator runs at most N child loops concurrently
 2. Dispatch the first `min(N, total_tasks)` children:
    - For each child, launch `/happysquad-loop` **via the Agent tool** with the worktree path passed as the working directory. Each child runs its own full state machine.
    - All child dispatches go in a single message with multiple Agent tool calls.
-3. As children complete (the Agent tool returns), update `fleet.json` and immediately dispatch the next pending task to keep N children in flight.
-4. Repeat until all tasks are `complete`, `BLOCKED`, or the fleet itself is aborted.
+   - Before each dispatch, run `mkdir -p <worktree>/.happysquad && touch <worktree>/.happysquad/.dispatched`. The liveness check below then sees the child as active until it writes its own state.
+3. **Wait for children in this turn.** Never end the turn while a child is in flight (same rule as squad-loop §2 step 3). A child is done when `<worktree>/.happysquad/state.json` reaches `COMPLETE` or `BLOCKED`. If the Agent tool returns the child's result, read that file. If it returns an async handle, poll with a foreground Bash call (`timeout: 600000`), and repeat the call while it prints `WAITING`:
+
+   ```bash
+   F=.happysquad/fleets/<fleet_id>
+   for i in $(seq 30); do            # ~5 min per call
+     touch "$F/.orchestrator"
+     for wt in <in-flight worktrees>; do
+       grep -qE '"current_state": *"(COMPLETE|BLOCKED)"' "$wt/.happysquad/state.json" 2>/dev/null && { echo "DONE $wt"; exit 0; }
+       [ -z "$(find "$wt/.happysquad" -mmin -30 -print -quit 2>/dev/null)" ] && { echo "QUIET $wt"; exit 0; }
+     done
+     sleep 10
+   done
+   echo WAITING
+   ```
+
+   - `DONE` → update `fleet.json` (see Monitoring) and immediately dispatch the next pending task to keep N children in flight.
+   - `QUIET` → nothing under the child's `.happysquad/` changed for 30 minutes: the child stopped without finishing. Stop the child agent if the runtime gave a handle, then re-dispatch `/squad-resume` once in the same worktree and record `"redispatched": true`; the child's loop continues from its own state. A child that goes quiet again → `"status": "stalled"` in `fleet.json`. A stalled child does not stall the fleet; report it like a BLOCKED child.
+4. Repeat until all tasks are `complete`, `BLOCKED`, `stalled`, or the fleet itself is aborted.
 
 ### Monitoring
 
 After each child completes, the parent agent reads the child's `.happysquad/state.json` (inside the child's worktree) to get its final state, verdict, iteration count, and files-changed list. Write that into `fleet.json.tasks[i]`.
+
+`status` is one of `pending`, `in_progress`, `complete`, `BLOCKED`, or `stalled` (quiet twice — see Concurrent dispatch step 3). A `stalled` child is reported like a BLOCKED one: its worktree is left in place for inspection.
 
 If a child returns BLOCKED, the fleet does NOT abort other children — they continue. BLOCKED children are surfaced in the aggregate report; the user decides how to handle each.
 
@@ -247,5 +266,10 @@ If the project has no `stack-profile.md`, run `/squad-detect` ONCE at the fleet 
 If `fleet.json` exists with `status: "in_progress"`:
 
 1. Ask the user: "Fleet `<fleet_id>` is in progress (P completed, Q running, R pending). Resume / Abort / Status-only?"
-2. On Resume: dispatch the next pending children to fill up to `max_parallel`. Children that were in progress will have their own `.happysquad/state.json` inside the worktree — they resume from there.
+2. On Resume: first reconcile every `in_progress` child against its worktree. Never re-run a child that finished.
+   - `<worktree>/.happysquad/state.json` is `COMPLETE` or `BLOCKED` → record it per Monitoring.
+   - Anything under `<worktree>/.happysquad/` changed in the last 30 minutes → the child may still be running; treat it as in flight and wait per Concurrent dispatch step 3.
+   - Otherwise → re-dispatch it per the `QUIET` rule.
+
+   Then dispatch pending children to fill up to `max_parallel`.
 3. On Abort: mark `fleet.json.status: "aborted"`, leave worktrees in place, generate a partial aggregate report.

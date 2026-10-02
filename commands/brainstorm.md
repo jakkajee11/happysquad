@@ -26,6 +26,8 @@ Steps:
     - The question: **"Proceed to /happysquad-loop with this consensus as the task input?"**
 13. If the user says yes, invoke /happysquad-loop with a one-paragraph distillation of consensus.md as the task, and ensure the orchestrator passes the full consensus path to the architecter so it reads the consensus before designing.
 
+Every "wait for markers" step follows the skill's "Waiting on agents" rule — never end the turn while agents are running.
+
 Never auto-pipe to /happysquad-loop. Always ask.
 
 Never silently re-loop past round 3. If convergence is major-dissent, surface it and stop — let the user decide whether to add a 4th round, escalate, or proceed anyway.
