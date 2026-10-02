@@ -17,8 +17,8 @@ Steps:
    - **More than one** → use AskUserQuestion to let the user pick which to resume. Show each candidate's kind, task/topic, position, and how long ago it was updated. Default-highlight the most recently updated.
 4. Resume the chosen candidate by loading the right skill and entering its resume protocol:
    - **dev-loop** → load `${CLAUDE_PLUGIN_ROOT}/skills/squad-loop/SKILL.md`. Read `state.json`, announce "Resuming run `<run-id>` at state `<current_state>`, iteration `<N>` of `<cap>`", then run the skill's "Orchestrator not resumed" check (Marker protocol) — if the current phase's output is already on disk, continue from it at the evidence gate instead of re-dispatching. Otherwise continue the state machine from `current_state`. For parallel runs, re-check which workstreams are pending vs complete and only dispatch the pending ones.
-   - **brainstorm** → load `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm-session/SKILL.md`. Resume at `current_round`, re-dispatching only the agents whose round-N file is missing.
-   - **fleet** → load `${CLAUDE_PLUGIN_ROOT}/skills/fleet-orchestrator/SKILL.md`. Dispatch the next pending children up to `max_parallel`; children that were mid-run resume from their own worktree `state.json`.
+   - **brainstorm** → load `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm-session/SKILL.md`. Follow its resume protocol: wait out any agent still writing, then re-dispatch only the agents with neither a marker nor a round-N file.
+   - **fleet** → load `${CLAUDE_PLUGIN_ROOT}/skills/fleet-orchestrator/SKILL.md`. Follow its resume protocol: record children whose worktree `state.json` is already `COMPLETE`/`BLOCKED` without re-running them, keep waiting on children still active, re-dispatch quiet ones via `/squad-resume`, then dispatch pending children up to `max_parallel`.
 5. Before doing any work, show a 5-line recap of where things stand so the user can confirm this is the right thing to resume. If the user objects, offer to switch to a different candidate or to `/squad-status` for the full picture.
 
 Notes:

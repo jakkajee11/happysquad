@@ -18,7 +18,7 @@ Steps:
 5. Create `.happysquad/fleets/<fleet_id>/`, write `tasks.md`, initialize `fleet.json`.
 6. Create one git worktree per task per the skill's Worktree creation rules. Base branch defaults to `main` (or whatever the current branch is if `main` doesn't exist).
 7. Dispatch up to `max_parallel` children (default 4) **in a single message with multiple Agent tool calls**. Each child Agent invocation runs `/happysquad-loop` with the task as arguments and the worktree path as the working directory.
-8. As children complete, update `fleet.json` and dispatch the next pending child to maintain `max_parallel` in flight. Don't exceed the cap.
+8. As children complete, update `fleet.json` and dispatch the next pending child to maintain `max_parallel` in flight. Don't exceed the cap. Wait per the skill's Concurrent dispatch step 3 — never end the turn while children are in flight.
 9. When all children resolve (PASS / BLOCKED / FAIL), write the aggregate report per the skill template and offer:
    - Wiki ingest for PASS children (one at a time, never parallel — wiki writes share `knowledge/wiki/index.md`)
    - Worktree cleanup (yes / no / keep-failed-only)
