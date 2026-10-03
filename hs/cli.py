@@ -70,9 +70,54 @@ def cmd_init(args):
         # and git status would list `.happysquad/` as untracked forever.
         S.atomic_write(gi, "/*\n!/.gitignore\n!/config.json\n!/stack-profile.md\n!/stack-profile.json\n!/risk-patterns.json\n")
     cp = C.config_path(root)
+    seeded = {}
     if not os.path.isfile(cp):
-        S.atomic_write_json(cp, {"build_cmd": None, "test_cmd": None, "coverage_report": None})
-    _out({"ok": True, "config": os.path.relpath(cp, root)})
+        seeded = seed_commands(root)
+        S.atomic_write_json(cp, {"build_cmd": seeded.get("build_cmd"), "test_cmd": seeded.get("test_cmd"),
+                                 "coverage_report": seeded.get("coverage_report")})
+    cfg_now = C.load(root, warn=False)
+    note = None if cfg_now.get("test_cmd") else "no test command detected — set test_cmd in .happysquad/config.json before `hs run start`"
+    _out({"ok": True, "config": os.path.relpath(cp, root), "seeded": seeded, "note": note})
+
+
+def seed_commands(root):
+    """Best-effort build/test/coverage commands from manifests (spec §7.0: hs init seeds them).
+
+    Order: package.json scripts → pyproject/pytest → go.mod → Cargo.toml → *.csproj. Returns {} when unsure.
+    """
+    import glob
+    import json as _json
+    pj = os.path.join(root, "package.json")
+    if os.path.isfile(pj):
+        try:
+            scripts = _json.load(open(pj)).get("scripts") or {}
+        except ValueError:
+            scripts = {}
+        pm = "pnpm" if os.path.isfile(os.path.join(root, "pnpm-lock.yaml")) else "yarn" if os.path.isfile(os.path.join(root, "yarn.lock")) else "npm"
+        run = ("%s run " % pm) if pm != "yarn" else "yarn "
+        out = {}
+        if "build" in scripts:
+            out["build_cmd"] = "%sbuild" % run
+        elif "lint" in scripts:
+            out["build_cmd"] = "%slint" % run
+        if "test" in scripts:
+            out["test_cmd"] = "%s test" % pm if pm != "yarn" else "yarn test"
+            t = scripts["test"]
+            if "vitest" in t or "jest" in t:
+                out["coverage_report"] = "coverage/coverage-summary.json"
+            elif "lcov" in t or "c8" in t or "nyc" in t:
+                out["coverage_report"] = "coverage/lcov.info"
+        return out
+    if os.path.isfile(os.path.join(root, "pyproject.toml")) or glob.glob(os.path.join(root, "pytest.ini")) or glob.glob(os.path.join(root, "tests", "test_*.py")):
+        return {"build_cmd": "python3 -m compileall -q .", "test_cmd": "python3 -m pytest -q --cov=. --cov-report=json",
+                "coverage_report": "coverage.json"}
+    if os.path.isfile(os.path.join(root, "go.mod")):
+        return {"build_cmd": "go build ./...", "test_cmd": "go test ./... -coverprofile=coverage.out", "coverage_report": None}
+    if os.path.isfile(os.path.join(root, "Cargo.toml")):
+        return {"build_cmd": "cargo build", "test_cmd": "cargo test", "coverage_report": None}
+    if glob.glob(os.path.join(root, "*.csproj")) or glob.glob(os.path.join(root, "*.sln")):
+        return {"build_cmd": "dotnet build", "test_cmd": "dotnet test --collect:\"XPlat Code Coverage\"", "coverage_report": None}
+    return {}
 
 
 def cmd_config(args):

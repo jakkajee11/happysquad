@@ -1,7 +1,7 @@
 {
   "name": "happysquad",
-  "version": "0.16.2",
-  "description": "Software-development squad with five core agents plus four optional specialist reviewers (security/performance/requirement/standard). Three review modes — single, split, split-on-risk (default). Evidence-based loop gates (verified build/test/coverage, red→green proof), per-finding Verify commands with an inner fix loop + delta review, convergence detection with early BLOCKED. Parallel-safe execution via workstreams + ownership maps, fleet mode for multi-task git-worktree isolation, 3-round brainstorm session, stack detector for per-agent skill recommendations, a compounding Karpathy-style project wiki, and cross-session resume (state survives session close; /squad-resume + SessionStart nudge). A pre-loop team-assembly step (/squad-assemble) analyzes the spec and proposes review mode, specialists, models, and optional external-executor roles behind an approval gate; approved plans are honored by the loop, ignored otherwise. External executors (glm/opencode, advisory-only) cover exactly three roles — mechanical offload, advisory cross-review, quota fallback — never parallel co-implementation. A standalone /ask-kilo command pulls an advisory second opinion from a non-Claude model via the kilo CLI — prompt-only, no repo access, no edits, zero verdict weight.",
+  "version": "1.0.0-rc1",
+  "description": "Software-development squad for Claude Code: a python3 engine (bin/hs) runs architect \u2192 implement \u2192 test \u2192 conflict gate \u2192 risk-routed specialists \u2192 review with evidence gates, red\u2192green proof, per-finding verify, an inner fix loop and convergence detection; agents are Claude subagents driven either from a session (/happysquad-loop) or headless in an isolated worktree. Plus brainstorm, fleet, stack detector and a project wiki.",
   "author": {
     "name": "happydaddy"
   },
@@ -13,22 +13,13 @@
     "architecture",
     "orchestration",
     "brainstorm",
-    "product-management",
     "wiki",
-    "knowledge-base",
-    "karpathy",
     "stack-detection",
-    "skill-orchestration",
     "parallel",
     "fleet",
     "worktree",
-    "claude-agent-team",
-    "session-resume",
-    "team-assembly",
-    "external-executor",
-    "approval-gate",
-    "second-opinion",
-    "kilo"
+    "headless",
+    "session-resume"
   ],
   "license": "MIT"
 }
