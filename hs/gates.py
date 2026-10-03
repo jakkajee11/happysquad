@@ -34,6 +34,10 @@ def _agent_cmds(cmds, cfg, kind):
 
 
 def _run_all(root, phase_dir, cmds, cfg, prefix, stop_on_fail=True):
+    # the coverage report's directory is commonly gitignored and therefore absent in a fresh worktree
+    rep = cfg.get("coverage_report")
+    if rep and os.path.dirname(rep):
+        os.makedirs(os.path.join(root, os.path.dirname(rep)), exist_ok=True)
     results, ok = [], True
     for i, (src, c) in enumerate(cmds):
         log = os.path.join(phase_dir, "logs", "%s-%d.log" % (prefix, i))

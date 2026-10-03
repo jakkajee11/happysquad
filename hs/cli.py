@@ -82,7 +82,16 @@ def cmd_run(args):
     if args.no_parallel:
         cfg["no_parallel"] = True
     if args.sub == "start":
-        act = machine.start(root, args.task, cfg, lite=args.lite, driver=args.driver)
+        driver = args.driver or cfg.get("driver", "agent-tool")
+        if driver in ("headless", "fake"):
+            from . import drivers
+            if driver == "fake" and not os.environ.get("HS_CLAUDE"):
+                os.environ["HS_CLAUDE"] = os.path.join(machine.PLUGIN_ROOT, "evals", "fake_claude.py")
+            iso = "none" if args.no_isolate else None
+            act = drivers.run_headless(root, args.task, cfg, lite=args.lite, isolate_wt=iso)
+            _out(act)
+            sys.exit(_exit_for(act))
+        act = machine.start(root, args.task, cfg, lite=args.lite, driver=driver)
         if act.get("action") != "error":
             act = _resolve(root, S.current_run_id(root), cfg, act)
         _out(act)
@@ -261,8 +270,15 @@ def main(argv=None):
     rst.add_argument("task")
     rst.add_argument("--lite", action="store_true")
     rst.add_argument("--no-parallel", action="store_true")
-    rst.add_argument("--driver")
+    rst.add_argument("--no-isolate", action="store_true", help="headless: run in the working tree instead of a worktree")
+    rst.add_argument("--driver", choices=["agent-tool", "headless", "fake"])
     r.set_defaults(fn=cmd_run)
+
+    an = sub.add_parser("answer")
+    an.add_argument("key")
+    an.add_argument("value")
+    an.add_argument("--run")
+    an.set_defaults(fn=lambda a: _out(machine.answer(_root(a), _rid(_root(a), a), C.load(_root(a)), a.key, a.value)))
 
     rk = sub.add_parser("risk")
     rk.add_argument("--run")

@@ -488,13 +488,23 @@ def advance(root, run_id, cfg):
         if st.get("gates"):
             return next_action(root, run_id, cfg)
         # 2. pending agent outputs
-        consumed_events = {ev.get("data", {}).get("phase_dir") for ev in S.read_events(rdir) if ev.get("event") == "consume"}
+        # A `consume` event whose follow-up state write never landed (crash between the two) must be
+        # replayed: the event alone proves nothing was transitioned. Dedup by "a later event for the
+        # same phase_dir exists" instead of by the consume event itself.
+        evs = S.read_events(rdir)
+        settled = set()
+        for i, ev in enumerate(evs):
+            if ev.get("event") == "consume":
+                pdn = ev.get("data", {}).get("phase_dir")
+                if any(e.get("data", {}).get("phase_dir") == pdn or e.get("event") in ("transition", "gates.start", "review", "block")
+                       for e in evs[i + 1:]):
+                    settled.add(pdn)
         for p in list(st.get("pending", [])):
             of = os.path.join(root, p["out_file"])
             if not os.path.isfile(of):
                 continue
             st["pending"].remove(p)
-            if p["phase_dir"] in consumed_events:
+            if p["phase_dir"] in settled:
                 continue
             try:
                 out = S.read_json(of)
@@ -1009,6 +1019,16 @@ def block_manual(root, run_id, cfg, cause, reason):
     with S.locked(rdir):
         st = S.load_state(rdir)
         return _block(root, rdir, st, cause, reason)
+
+
+def answer(root, run_id, cfg, key, value):
+    """Record an answer to an `ask` action (no asks are emitted in P1a; kept for driver symmetry)."""
+    rdir = S.run_dir(root, run_id)
+    with S.locked(rdir):
+        st = S.load_state(rdir)
+        st.setdefault("answers", {})[key] = value
+        S.commit(rdir, st, "answer", phase=st["state"], iteration=st["iteration"], data={"key": key, "value": value})
+    return next_action(root, run_id, cfg)
 
 
 # --- resume (spec §8.7) ---------------------------------------------------------
