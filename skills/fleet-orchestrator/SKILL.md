@@ -48,4 +48,14 @@ waiting.
 - Do not open child worktrees, read their state, or run their builds yourself.
 - Siblings are isolated by construction: PASS branches are not proven to integrate with each other;
   say so when you print the merge commands.
-- Tracker frontier / drain modes are not in this version (1.1).
+
+## Tracker frontier / drain
+
+`$HS fleet start --frontier` reads `docs/agents/issue-tracker.md` (Matt Pocock `/to-tickets` layout)
+and dispatches its **frontier** — open `ready-for-agent` tickets whose blockers are all done — instead
+of `<tasks>`. `--drain` implies `--frontier`, runs serially (`max_parallel` defaults to 1, override with
+`--max`), and pumps: as each child finishes, it re-reads the frontier and appends any ticket that just
+unblocked. A completed ticket is labelled `squad:passed` (never closed — the user owns close/merge
+timing) and excluded from every future frontier read. Empty frontier → `$HS fleet start --drain` prints
+one line, "Frontier empty — nothing to drain." and stops with success — safe under
+`/loop 5m /squad-fleet --drain`. `$HS frontier` prints the frontier JSON without starting a fleet.

@@ -58,33 +58,44 @@ def _child_wt(root, fid, slug):
 
 # --- start -----------------------------------------------------------------------
 
-def start(root, tasks, cfg, max_parallel=None, lite=False):
+def start(root, tasks, cfg, max_parallel=None, lite=False, frontier=False, drain=False):
     if not gitutil.is_repo(root):
         return {"action": "error", "message": "not a git repository"}
     if not cfg.get("test_cmd"):
         return {"action": "error", "message": "config.test_cmd is null — set it in .happysquad/config.json"}
-    tasks = [t.strip() for t in tasks if t and t.strip()]
-    if not tasks:
+    drain = bool(drain)
+    frontier = bool(frontier) or drain
+    if frontier:
+        from . import frontier as FR
+        fr = FR.read(root)
+        if not fr["frontier"]:
+            return {"action": "fleet", "status": "empty", "note": fr.get("note") or "Frontier empty — nothing to drain."}
+        items = [((t.get("task") or t.get("title") or t["ref"]).strip(), t["ref"]) for t in fr["frontier"]]
+    else:
+        items = [(t.strip(), None) for t in tasks if t and t.strip()]
+    if not items:
         return {"action": "error", "message": "no tasks"}
     ts = S.now().replace("-", "").replace(":", "").replace("T", "-").replace("Z", "")
-    fid = "%s-%s" % (ts, _slug(tasks[0]))
+    fid = "%s-%s" % (ts, _slug(items[0][0]))
     fd = fleet_dir(root, fid)
     os.makedirs(fd, exist_ok=True)
-    S.atomic_write(os.path.join(fd, "tasks.md"), "\n".join("- %s" % t for t in tasks) + "\n")
+    S.atomic_write(os.path.join(fd, "tasks.md"), "\n".join("- %s" % t for t, _ in items) + "\n")
     seen = set()
     children = []
-    for t in tasks:
+    for t, ticket in items:
         slug = _slug(t)
         base = slug
         k = 2
         while slug in seen:
             slug = "%s-%d" % (base, k); k += 1
         seen.add(slug)
-        children.append({"slug": slug, "task": t, "status": "pending", "worktree": None, "branch": None,
-                         "run_id": None, "pid": None, "started_at": None, "finished_at": None,
-                         "verdict": None, "iterations": None, "cause": None, "redispatched": False})
-    f = {"fleet_id": fid, "status": "in_progress", "max_parallel": max_parallel or cfg.get("max_parallel", 4),
-         "lite": bool(lite), "base": gitutil.head(root), "started_at": S.now(), "children": children}
+        children.append({"slug": slug, "task": t, "ticket": ticket, "passed": False, "status": "pending",
+                         "worktree": None, "branch": None, "run_id": None, "pid": None, "started_at": None,
+                         "finished_at": None, "verdict": None, "iterations": None, "cause": None, "redispatched": False})
+    mp = max_parallel or (1 if drain else cfg.get("max_parallel", 4))
+    f = {"fleet_id": fid, "status": "in_progress", "max_parallel": mp,
+         "lite": bool(lite), "drain": drain, "frontier": frontier, "base": gitutil.head(root),
+         "started_at": S.now(), "children": children}
     save(root, fid, f)
     S.atomic_write(os.path.join(S.hs_dir(root), "current-fleet"), fid + "\n")
     return advance(root, fid, cfg)
@@ -186,6 +197,45 @@ def _reconcile(root, fid, f, c, cfg):
     return True
 
 
+def _mark_passed_children(root, f):
+    """Label COMPLETE children's tickets `squad:passed` once (spec §12, 1.1). Never closes an issue."""
+    from . import frontier as FR
+    changed = False
+    for c in f["children"]:
+        if c["status"] == "COMPLETE" and c.get("ticket") and not c.get("passed"):
+            try:
+                FR.mark_passed(root, c["ticket"])
+            except Exception:
+                pass
+            c["passed"] = True
+            changed = True
+    return changed
+
+
+def _pump_frontier(root, f):
+    """Drain mode only: append any newly-ready, not-yet-a-child ticket as a pending child."""
+    from . import frontier as FR
+    fr = FR.read(root)
+    existing_tickets = {c["ticket"] for c in f["children"] if c.get("ticket")}
+    existing_slugs = {c["slug"] for c in f["children"]}
+    added = False
+    for t in fr["frontier"]:
+        if t["ref"] in existing_tickets:
+            continue
+        task = (t.get("task") or t.get("title") or t["ref"]).strip()
+        slug = _slug(task)
+        base, k = slug, 2
+        while slug in existing_slugs:
+            slug = "%s-%d" % (base, k); k += 1
+        existing_slugs.add(slug)
+        f["children"].append({"slug": slug, "task": task, "ticket": t["ref"], "passed": False, "status": "pending",
+                              "worktree": None, "branch": None, "run_id": None, "pid": None, "started_at": None,
+                              "finished_at": None, "verdict": None, "iterations": None, "cause": None, "redispatched": False})
+        existing_tickets.add(t["ref"])
+        added = True
+    return added
+
+
 def advance(root, fid, cfg):
     f = load(root, fid)
     if f is None:
@@ -196,6 +246,11 @@ def advance(root, fid, cfg):
     for c in f["children"]:
         if c["status"] == "in_progress":
             changed |= _reconcile(root, fid, f, c, cfg)
+    if _mark_passed_children(root, f):
+        changed = True
+    if f.get("frontier") and f.get("drain"):
+        if _pump_frontier(root, f):
+            changed = True
     running = [c for c in f["children"] if c["status"] == "in_progress"]
     pending = [c for c in f["children"] if c["status"] == "pending"]
     while pending and len(running) < f["max_parallel"]:
@@ -235,7 +290,8 @@ def summary(root, fid, f=None):
         counts[c["status"]] = counts.get(c["status"], 0) + 1
     out = {"action": "fleet", "fleet_id": fid, "status": f["status"], "max_parallel": f["max_parallel"], "counts": counts,
            "children": [{"slug": c["slug"], "status": c["status"], "verdict": c.get("verdict"), "iterations": c.get("iterations"),
-                         "branch": c.get("branch"), "worktree": c.get("worktree"), "cause": c.get("cause")} for c in f["children"]]}
+                         "branch": c.get("branch"), "worktree": c.get("worktree"), "cause": c.get("cause"),
+                         "ticket": c.get("ticket"), "passed": c.get("passed")} for c in f["children"]]}
     if f["status"] == "complete":
         out["report"] = os.path.relpath(os.path.join(fleet_dir(root, fid), "aggregate-report.md"), root)
         out["merge"] = ["git merge --no-ff %s" % c["branch"] for c in f["children"] if c["status"] == "COMPLETE"]

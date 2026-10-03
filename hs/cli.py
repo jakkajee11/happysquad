@@ -254,7 +254,7 @@ def cmd_fleet(args):
                 if line and not line.startswith("#"):
                     tasks.append(line)
         tasks += args.task or []
-        act = F.start(root, tasks, cfg, max_parallel=args.max, lite=args.lite)
+        act = F.start(root, tasks, cfg, max_parallel=args.max, lite=args.lite, frontier=args.frontier, drain=args.drain)
         _out(act)
         sys.exit(_exit_for(act))
     fid = args.fleet or F.current_fleet(root)
@@ -269,6 +269,11 @@ def cmd_fleet(args):
         _out(F.summary(root, fid))
     elif args.sub == "cleanup":
         _out(F.cleanup(root, fid, cfg, keep_failed=not args.all))
+
+
+def cmd_frontier(args):
+    from . import frontier as F
+    _out(F.read(_root(args)))
 
 
 def cmd_wiki(args):
@@ -498,6 +503,8 @@ def main(argv=None):
     fs.add_argument("--tasks-file")
     fs.add_argument("--max", type=int)
     fs.add_argument("--lite", action="store_true")
+    fs.add_argument("--frontier", action="store_true", help="dispatch the tracker frontier (docs/agents/issue-tracker.md) instead of <tasks>")
+    fs.add_argument("--drain", action="store_true", help="--frontier, serial (max 1 unless --max), pumps as blockers clear")
     for name in ("advance", "status"):
         p = fls.add_parser(name)
         p.add_argument("--fleet")
@@ -509,6 +516,8 @@ def main(argv=None):
     fc.add_argument("--fleet")
     fc.add_argument("--all", action="store_true", help="remove BLOCKED/stalled worktrees too")
     fl.set_defaults(fn=cmd_fleet)
+
+    sub.add_parser("frontier").set_defaults(fn=cmd_frontier)
 
     wk = sub.add_parser("wiki")
     wks = wk.add_subparsers(dest="sub", required=True)
