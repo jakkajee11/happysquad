@@ -30,10 +30,25 @@ def _exit_for(act):
 
 
 def _resolve(root, rid, cfg, act):
-    """Turn a bare `dispatch` (no prompt rendered yet) into a rendered one. Safe to call repeatedly."""
-    if act.get("action") == "dispatch" and not act.get("prompt_file"):
-        act = machine.dispatch(root, rid, cfg)
-    act.pop("_phase_dir", None)
+    """Turn a bare dispatch(_many) (prompts not rendered yet) into rendered ones; drive internal states.
+
+    Safe to call repeatedly. Loops because an `advance` reason can chain (gates done → internal → dispatch).
+    """
+    for _ in range(8):
+        a = act.get("action")
+        if a in ("dispatch", "dispatch_many") and act.get("_specs"):
+            act = machine.dispatch(root, rid, cfg)
+            continue
+        if a == "advance":
+            act = machine.advance(root, rid, cfg)
+            if act.get("action") == "advance":
+                # advance() returned next_action() with nothing consumable → genuinely idle; avoid spinning
+                act = machine.next_action(root, rid, cfg)
+                if act.get("action") == "advance":
+                    break
+            continue
+        break
+    act.pop("_specs", None)
     return act
 
 
@@ -41,8 +56,6 @@ def _awaiting(act):
     """Files a driver must wait on for this action, or [] when the action is actionable now."""
     if act.get("action") == "wait":
         return act["files"]
-    if act.get("action") == "dispatch" and act.get("redispatch"):
-        return [act["out_file"]]
     return []
 
 
@@ -66,9 +79,11 @@ def cmd_config(args):
 def cmd_run(args):
     root = _root(args)
     cfg = C.load(root)
+    if args.no_parallel:
+        cfg["no_parallel"] = True
     if args.sub == "start":
         act = machine.start(root, args.task, cfg, lite=args.lite, driver=args.driver)
-        if act.get("action") == "dispatch":
+        if act.get("action") != "error":
             act = _resolve(root, S.current_run_id(root), cfg, act)
         _out(act)
         sys.exit(_exit_for(act))
@@ -105,16 +120,16 @@ def cmd_wait(args):
         act = _resolve(root, rid, cfg, machine.next_action(root, rid, cfg))
         files = _awaiting(act)
         if not files:
-            if act.get("action") == "advance":
-                act = _resolve(root, rid, cfg, machine.advance(root, rid, cfg))
-                if _awaiting(act):
-                    continue
             _out(act)
             sys.exit(_exit_for(act))
         paths = [os.path.join(root, f) for f in files]
-        if all(os.path.isfile(p) and os.path.getsize(p) > 0 for p in paths):
+        # agents: any single output is enough to make progress (waves consume per workstream);
+        # gates: same — advance() handles each finished child independently
+        if any(os.path.isfile(p) and os.path.getsize(p) > 0 for p in paths):
             act = _resolve(root, rid, cfg, machine.advance(root, rid, cfg))
             if _awaiting(act):
+                if act.get("files") == files:
+                    time.sleep(args.interval)
                 continue
             _out(act)
             sys.exit(_exit_for(act))
@@ -172,6 +187,17 @@ def cmd_validate(args):
     sys.exit(0 if not errs else 1)
 
 
+def cmd_risk(args):
+    from . import risk
+    root = _root(args)
+    rid = getattr(args, "run", None) or S.current_run_id(root)
+    base = args.base
+    if not base and rid:
+        st = S.load_state(S.run_dir(root, rid)) or {}
+        base = st.get("base_ref")
+    _out(risk.detect(root, base))
+
+
 def cmd_status(args):
     root = _root(args)
     rid = getattr(args, "run", None) or S.current_run_id(root)
@@ -183,7 +209,10 @@ def cmd_status(args):
         _out({"run_id": rid, "state": "missing"})
         return
     _out({"run_id": rid, "state": st["state"], "iteration": st["iteration"], "cap": st["cap"],
-          "pending": [p["phase"] for p in st.get("pending", [])], "gates": list(st.get("gates", {}).keys()),
+          "mode": st.get("mode"), "lite": st.get("lite"), "inner_pass": st.get("inner_pass"),
+          "workstreams": [{"name": w["name"], "impl": w.get("impl"), "test": w.get("test")} for w in st.get("workstreams", [])],
+          "pending": [{"phase": p["phase"], "ws": p.get("ws"), "axis": p.get("axis")} for p in st.get("pending", [])],
+          "gates": list(st.get("gates", {}).keys()),
           "task": st["task"][:80], "updated_at": st.get("updated_at"), "block_cause": st.get("block_cause")})
 
 
@@ -235,8 +264,14 @@ def main(argv=None):
     rst = rs.add_parser("start")
     rst.add_argument("task")
     rst.add_argument("--lite", action="store_true")
+    rst.add_argument("--no-parallel", action="store_true")
     rst.add_argument("--driver")
     r.set_defaults(fn=cmd_run)
+
+    rk = sub.add_parser("risk")
+    rk.add_argument("--run")
+    rk.add_argument("--base")
+    rk.set_defaults(fn=cmd_risk)
 
     for name, fn in (("next", cmd_next), ("advance", cmd_advance), ("resume", cmd_resume)):
         p = sub.add_parser(name)

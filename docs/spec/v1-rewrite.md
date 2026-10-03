@@ -688,6 +688,7 @@ toy repo + `claude -p` headless driver 1 loop, `--max-budget-usd 3`, gate ที
 - **Provenance ใช้ prefix เต็ม** ไม่ใช่ argv[0] (§7.0) ยอมให้ `verify` ตกเป็น `manual` มากขึ้น
 - **P1 แยกเป็น P1a (core, foreground gates, ใช้ได้จริง) และ P1b (hardening: locking, detached gates, isolation)** (§19)
 - **hs เป็น package `hs/` หลายไฟล์** `bin/hs` เป็น entry (§3, §4)
+- **Coverage rule = delta (assumption, P1a, 2026-10-03):** baseline แสดงว่า 0.16 ไม่เคยบังคับ per-file threshold และไฟล์ที่เริ่มจาก 0% ไม่มีทางถึง 50 ในงานเดียว v1.0 จึง gate **เฉพาะบรรทัดที่ diff เพิ่ม** (`new_lines_hit / new_lines_executable ≥ threshold`) บรรทัดเดิมยกเว้น ต้องการ per-line data (`DA:` ใน lcov, `<line hits>` ใน cobertura); format ที่ให้แค่ percent ต่อไฟล์ (istanbul summary, pytest-cov json) ถอยไปใช้ per-file percent ของไฟล์ที่ **สร้างใหม่** เท่านั้น และไฟล์ที่แก้ได้ `G-COV-UNVERIFIED` major เปลี่ยนได้ที่ `config.coverage_rule ∈ {delta, file}`
 
 ### คำถามเปิด (จาก consensus)
 

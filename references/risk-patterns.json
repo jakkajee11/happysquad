@@ -1,0 +1,24 @@
+{
+  "_doc": "Default risk patterns for `hs risk` (spec §7.6). Regexes (python re) applied to repo-relative paths and to added diff lines. A project may add/override in .happysquad/risk-patterns.json; set a key to [] to disable it.",
+  "sec": {
+    "paths": [
+      "(?i)auth", "(?i)authn", "(?i)authz", "(?i)permission", "(?i)\\brole", "(?i)token", "(?i)secret",
+      "(?i)credential", "(?i)password", "(?i)session", "(?i)jwt", "(?i)oauth", "(?i)saml", "(?i)api.?key",
+      "(?i)encrypt", "(?i)decrypt", "(?i)\\bhash", "(?i)hmac", "(?i)crypto", "(?i)signature",
+      "(?i)payment", "(?i)billing", "(?i)charge", "(?i)invoice", "(?i)subscription", "(?i)\\bcard", "(?i)kyc"
+    ],
+    "diff": [
+      "(?i)\\bcors\\b", "(?i)\\bcsp\\b", "(?i)helmet", "Content-Security-Policy", "Access-Control-Allow",
+      "X-Frame-Options", "Strict-Transport-Security", "(?i)\\beval\\(", "(?i)subprocess\\.(run|Popen|call)\\(.*shell\\s*=\\s*True",
+      "(?i)\\bexec\\(", "(?i)dangerouslySetInnerHTML", "(?i)verify\\s*=\\s*False"
+    ],
+    "manifests": ["package.json", "requirements.txt", "pyproject.toml", "Cargo.toml", "go.mod", "Gemfile", "composer.json", "pom.xml", "build.gradle", "*.csproj"]
+  },
+  "perf": {
+    "paths": ["(?i)migration", "(?i)alembic", "prisma/schema\\.prisma", "(?i)queue", "(?i)worker", "(?i)\\bjob", "(?i)background", "(?i)scheduler", "(?i)cache"],
+    "diff": [
+      "\\bSELECT\\b", "\\bINSERT\\b", "\\bUPDATE\\b", "\\bDELETE\\b", "\\bJOIN\\b", "\\.where\\(", "\\.findMany\\(", "\\.toListAsync\\(",
+      "\\.Include\\(", "\\bfetch\\(", "\\baxios\\.", "httpClient\\.", "\\brequests\\.(get|post|put|delete)\\(", "(?i)\\bredis\\b", "(?i)memcache", "(?i)\\bmemo"
+    ]
+  }
+}

@@ -13,6 +13,7 @@ DEFAULTS = {
     "validation_retries": 2,
     "gate_timeout": 600,
     "coverage_threshold": 80,
+    "coverage_rule": "delta",  # delta = lines added by the change; file = whole-file percent
     "review_mode": "split-on-risk",
     "max_parallel": 4,
     "models": {
