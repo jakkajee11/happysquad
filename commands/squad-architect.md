@@ -3,15 +3,14 @@ description: Run only the architecter agent — produce a design document for a 
 argument-hint: <task description>
 ---
 
-Load the `squad-loop` skill at `${CLAUDE_PLUGIN_ROOT}/skills/squad-loop/SKILL.md` for the file-layout and state-file conventions, but execute only the ARCHITECT state.
-
-Steps:
+`HS="${CLAUDE_PLUGIN_ROOT}/bin/hs"`
 
 1. If `$ARGUMENTS` is empty, ask the user for the task with AskUserQuestion.
-2. Generate or reuse a run-id; create `.happysquad/runs/<run-id>/`.
-3. Update `.happysquad/state.json` to `current_state = ARCHITECT`, `iteration = 1` (or bump if continuing).
-4. Launch the `architecter` subagent via the Agent tool, with model from config (default `opus`). Pass the task, the run-id, and the run directory path.
-5. Wait for the `DESIGN_READY: <path>` completion marker.
-6. Report the path to the design document and stop. Do not auto-advance to /squad-implement.
-
-Use this command when you want to inspect the design before committing to implementation, or when the design needs human review.
+2. Run `$HS run start "<task>"`. Parse the JSON line — it returns the ARCHITECT `dispatch` action.
+3. Act on it exactly as `${CLAUDE_PLUGIN_ROOT}/skills/squad-loop/SKILL.md`'s protocol says: read
+   `prompt_file`, call the Agent tool once with `subagent_type: happysquad:hs-architecter`,
+   `model: <model>`, prompt = the file's content verbatim.
+4. When the agent returns, run `$HS advance`.
+5. Stop. Print the design path `.happysquad/runs/<run-id>/design.md` and tell the user to resume
+   with `/squad-resume`. The run stays in progress by design — this command does not advance past
+   ARCHITECT.
