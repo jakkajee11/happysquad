@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -289,19 +290,95 @@ def cmd_block(args):
     _out(machine.block_manual(root, rid, cfg, args.cause, args.reason))
 
 
+_SOURCE_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css", ".prisma", ".py", ".go",
+                ".rs", ".java", ".rb", ".php", ".c", ".cpp", ".h", ".swift", ".kt")
+
+
+def _git(root, *args):
+    """Run a git command in `root`; None on any failure (not a repo, no git, bad ref)."""
+    try:
+        return subprocess.check_output(["git"] + list(args), cwd=root, text=True,
+                                        stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
+def _session_path(root):
+    return os.path.join(S.hs_dir(root), ".session")
+
+
+def _hook_session_start(root):
+    lines = []
+    rid = S.current_run_id(root)
+    st = S.load_state(S.run_dir(root, rid)) if rid else None
+    if st:
+        state = st.get("state")
+        if state == "BLOCKED":
+            lines.append("[happysquad] run %s is BLOCKED (cause %s) — read .happysquad/runs/%s/BLOCKED.md"
+                         % (rid, st.get("block_cause", "?"), rid))
+        elif state != "COMPLETE":
+            lines.append("[happysquad] in-progress run %s at %s (iteration %d/%d). Run /squad-resume to continue."
+                         % (rid, state, st.get("iteration", 0), st.get("cap", 0)))
+            ua = st.get("updated_at")
+            head_ts = _git(root, "log", "-1", "--format=%cI")
+            if ua and head_ts:
+                try:
+                    drifted = S.parse_ts(head_ts) > S.parse_ts(ua)
+                except Exception:
+                    drifted = False
+                if drifted:
+                    task = str(st.get("task", "?")).splitlines()[0][:60]
+                    lines.append('  ⚠ DRIFT: run is at %s (iter %s) for "%s",' % (state, st.get("iteration", "?"), task))
+                    lines.append('    but a commit landed after it last updated — likely direct work bypassed the loop.')
+                    lines.append('    Reconcile: /squad-status, then /squad-resume or mark the run done.')
+    if lines:
+        print("\n".join(lines))
+    S.atomic_write_json(_session_path(root), {"head": _git(root, "rev-parse", "HEAD"), "started_at": S.now(), "nudged": False})
+
+
+def _hook_stop(root, cfg):
+    if not cfg.get("hooks", {}).get("stop_progress_nudge"):
+        return
+    sp = _session_path(root)
+    sess = S.read_json(sp) or {}
+    if sess.get("nudged"):
+        return
+    changed = set()
+    head = _git(root, "rev-parse", "HEAD")
+    start = sess.get("head")
+    if start and head and start != head:
+        diff = _git(root, "diff", "--name-only", start, head)
+        changed.update(l for l in (diff or "").splitlines() if l.strip())
+    status = _git(root, "status", "--porcelain")
+    for line in (status or "").splitlines():
+        path = line[3:].strip()
+        if path:
+            changed.add(path)
+    if not changed or not any(p.endswith(_SOURCE_EXTS) for p in changed):
+        return
+    if any(os.path.basename(p).lower() == "progress.md" for p in changed):
+        return
+    sess["nudged"] = True
+    S.atomic_write_json(sp, sess)
+    sys.stderr.write("Sync reminder: source changed this session but no progress log was updated. Add a "
+                      "one-line entry to PROGRESS.md (or .happysquad/progress.md) — what changed / what's "
+                      "next — so the next session can resume, then finish.\n")
+    sys.exit(2)
+
+
 def cmd_hook(args):
-    if os.environ.get("HS_CHILD") == "1":
-        return
-    root = _root(args)
-    if not os.path.isdir(S.hs_dir(root)):
-        return
-    if args.which == "session-start":
-        rid = S.current_run_id(root)
-        if rid:
-            st = S.load_state(S.run_dir(root, rid))
-            if st and st["state"] not in ("COMPLETE", "BLOCKED"):
-                print("[happysquad] in-progress run %s at %s (iteration %d). Run /squad-resume to continue."
-                      % (rid, st["state"], st["iteration"]))
+    try:
+        if os.environ.get("HS_CHILD") == "1":
+            return
+        root = _root(args)
+        if not os.path.isdir(S.hs_dir(root)):
+            return
+        if args.which == "session-start":
+            _hook_session_start(root)
+        elif args.which == "stop":
+            _hook_stop(root, C.load(root, warn=False))
+    except Exception:
+        pass
 
 
 def main(argv=None):

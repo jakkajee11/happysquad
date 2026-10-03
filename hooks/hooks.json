@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start-resume-check.sh\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/hs\" hook session-start"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-sync-check.sh\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/hs\" hook stop"
           }
         ]
       }
