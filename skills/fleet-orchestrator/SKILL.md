@@ -1,277 +1,51 @@
 ---
 name: fleet-orchestrator
 description: |
-  Runs multiple independent happysquad-loop tasks in parallel, each in its own git worktree on its own
-  branch, so they cannot collide. Each fleet child is a normal /happysquad-loop with full
-  architect → implement → test → review machinery. The fleet orchestrator schedules them,
-  monitors completion, and aggregates results. Triggers: /squad-fleet, "run multiple tasks in parallel",
-  "fleet mode", "process this backlog", "fan out across worktrees".
+  Runs several independent happysquad tasks at once, each as a headless hs run in its own git
+  worktree and branch, scheduled by `bin/hs fleet` up to max_parallel. Trigger on /squad-fleet,
+  "run these in parallel", "process this backlog", "fan out across worktrees".
 ---
 
-> **Status (1.0.0-rc1):** this is the 0.16 fleet orchestrator. It dispatches the 0.16 `/happysquad-loop` protocol, which no longer exists — fleet is unsupported on the hs engine until `hs fleet` lands in P4 (spec §12). `/squad-drain` moved to the `happysquad-ext` plugin.
+# Fleet
 
-# Fleet Orchestrator
-
-The happysquad's multi-task parallel mode. Spawn N independent `/happysquad-loop` runs across N git worktrees, each on its own branch, all running concurrently. Each child is a complete loop (with its own architecter / implementer / tester / reviewer iterations); the fleet orchestrator handles dispatch, monitoring, and roll-up.
-
-Distinct from **within-task parallelism** (handled by the squad-loop skill's PARALLEL_IMPLEMENT state) — fleet mode parallelizes *across* tasks, not *within* one.
-
-## When to use
-
-| Situation                                                          | Use            |
-|--------------------------------------------------------------------|----------------|
-| One task with parts that can run side by side (backend + frontend) | squad-loop (parallel mode) |
-| Several unrelated features in a backlog                            | fleet          |
-| One feature touching multiple services / repos                     | fleet (one task per service) |
-| Quick bug-fix sweep across the codebase                            | fleet          |
-
-The break-even point: if tasks share files or designs, prefer in-task parallelism. If tasks are truly independent (different features, different layers, different goals), prefer fleet.
-
-## Architecture
+`hs fleet` owns the fleet: it creates one worktree per task, starts each task as a headless run
+(`hs run start --driver headless --no-isolate` inside that worktree), re-dispatches a child whose
+driver died once, and writes the aggregate report. You relay `hs fleet` commands and report.
 
 ```
-.happysquad/
-├── fleets/
-│   └── 20260520-103045-q2-features/        # one directory per fleet
-│       ├── fleet.json                       # fleet-level state + child summaries
-│       ├── tasks.md                         # input task list (verbatim)
-│       └── aggregate-report.md              # final roll-up across all children
-└── worktrees/
-    └── 20260520-103045-q2-features/
-        ├── add-export/                      # worktree for child 1 — on branch fleet/<fleet-id>/add-export
-        │   └── .happysquad/runs/.../...      # child's normal run artifacts
-        ├── update-billing/                   # worktree for child 2
-        └── infra-bump/                       # worktree for child 3
+HS="${CLAUDE_PLUGIN_ROOT}/bin/hs"
 ```
 
-Each worktree has its own `.happysquad/state.json` (with `mode: "fleet-child"` and `parent_fleet_id` set). The parent `fleet.json` tracks the cross-cutting view.
+## Protocol
 
-## fleet.json
+1. **Tasks.** From `$ARGUMENTS`: a file path → `--tasks-file <path>` (one task per line, `-`/`*`
+   bullets and `#` comments allowed); otherwise each quoted argument is a task. Nothing resolvable →
+   AskUserQuestion for the list. `--max=N` → `--max N`. `--lite` passes through.
+2. **First run in a project:** if `.happysquad/config.json` is missing, `$HS init` and show what it
+   seeded; `test_cmd` null → stop and ask for it. If `.happysquad/stack-profile.md` is missing, run
+   `/squad-detect` once.
+3. **Start.** `$HS fleet start <tasks…> [--max N] [--lite]`. Parse the JSON line: `fleet_id`,
+   `counts`, `children[]` (slug, status, branch, worktree).
+4. **Wait.** `$HS fleet wait --timeout 540` with the Bash tool (`timeout: 600000`). It prints the
+   fleet summary when the fleet is `complete`, or the same summary with `timed_out: true` — then
+   run it again. Never poll with your own loop; never end the turn while `status` is `in_progress`.
+5. **Report** (≤ 200 words): fleet_id, counts, per-child line (slug · verdict · iterations ·
+   branch), the `merge` commands verbatim, the `report` path, and for each BLOCKED child the
+   `BLOCKED.md` path from the report. Never merge anything.
+6. **Cleanup** only when the user asks: `$HS fleet cleanup` removes COMPLETE worktrees (branches
+   stay); `--all` also removes BLOCKED/stalled ones.
 
-```json
-{
-  "fleet_id": "20260520-103045-q2-features",
-  "started_at": "2026-05-20T10:30:45Z",
-  "updated_at": "2026-05-20T11:45:12Z",
-  "status": "in_progress",
-  "max_parallel": 4,
-  "tasks": [
-    {
-      "slug": "add-export",
-      "task": "let customers export their own data",
-      "worktree": ".happysquad/worktrees/20260520-103045-q2-features/add-export",
-      "branch": "fleet/20260520-103045-q2-features/add-export",
-      "run_id": "20260520-103047-add-export",
-      "ticket": "#42",
-      "status": "in_progress",
-      "current_state": "PARALLEL_TEST",
-      "iteration": 2
-    },
-    {
-      "slug": "update-billing",
-      "task": "switch billing to monthly proration",
-      "worktree": ".happysquad/worktrees/20260520-103045-q2-features/update-billing",
-      "branch": "fleet/20260520-103045-q2-features/update-billing",
-      "run_id": "20260520-103048-update-billing",
-      "status": "complete",
-      "verdict": "PASS",
-      "iteration": 3
-    },
-    {
-      "slug": "infra-bump",
-      "task": "upgrade EF Core to 9, .NET 9",
-      "worktree": ".happysquad/worktrees/20260520-103045-q2-features/infra-bump",
-      "branch": "fleet/20260520-103045-q2-features/infra-bump",
-      "run_id": "20260520-103049-infra-bump",
-      "status": "BLOCKED",
-      "iteration": 5
-    }
-  ]
-}
-```
+## Resume
 
-## Orchestration protocol
+`/squad-fleet` with no arguments while `.happysquad/current-fleet` names an `in_progress` fleet →
+`$HS fleet wait` continues it (children already finished are recorded, dead drivers are
+re-dispatched once, pending ones are launched). `$HS fleet status` shows the picture without
+waiting.
 
-### Setup
+## Rules
 
-1. Collect the task list. Sources, in order of preference:
-   - **Tracker frontier** — if `docs/agents/issue-tracker.md` exists (Matt Pocock skills configured the repo), read the **frontier**: open `ready-for-agent` tickets whose blockers are all done. Each becomes one fleet child. See "Tracker frontier mode" below.
-   - File path passed in `$ARGUMENTS` (newline-separated tasks).
-   - Pasted text via AskUserQuestion (the user types/pastes the list).
-   - Interactive prompt: ask "How many tasks? Then I'll ask for each one."
-2. Generate `fleet_id` = `YYYYMMDD-HHMMSS-<slug-of-fleet-purpose>`.
-3. Create `.happysquad/fleets/<fleet_id>/` and write `tasks.md` (verbatim input).
-4. Initialize `fleet.json` with `status: "in_progress"`, `max_parallel` from `.happysquad/config.json` (default 4 — limit to avoid overwhelming Claude Agent Team).
-
-### Tracker frontier mode
-
-When Matt Pocock skills are configured (`docs/agents/issue-tracker.md` present), the fleet reads its tasks from the tracker's **frontier** instead of asking the user to type them. `/to-tickets` is the natural feeder: it decomposes a feature into vertical tracer-bullet tickets (each `ready-for-agent`, sized to one context window); the fleet executes the frontier in parallel worktrees. This keeps happysquad as the executor — decomposition and context-sizing stay in Matt's domain.
-
-Read the tracker type from `docs/agents/issue-tracker.md`, then collect the frontier — tickets that are `ready-for-agent` **and** have no open blockers **and** are not already `squad:passed`:
-
-- **Local markdown** — glob `.scratch/*/issues/*.md`; a ticket is on the frontier when its body says `Status: ready-for-agent`, it is not marked `squad:passed`, and every entry in its `Blocked by:` line is done. Use its `**What to build:**` as the child task.
-- **GitHub** — `gh issue list --label ready-for-agent --state open --json number,title,body`, dropping any with an open blocking issue and any carrying the `squad:passed` label (e.g. pipe through `jq 'map(select(.labels | map(.name) | index("squad:passed") | not))'`, or use `--search '-label:squad:passed'`).
-- **GitLab** — the same via `glab`. **Other / unparseable** — fall back to the manual sources above and say why.
-
-Each frontier ticket becomes one fleet child. Record its reference (number or file path) in `fleet.json.tasks[i].ticket`.
-
-**Frontier pumping (optional).** Tracker tickets can carry blocking edges, so the frontier advances as work lands. After a child resolves, re-scan and dispatch any ticket it just unblocked (still capped at `max_parallel`). To resolve blockers within a run, label a finished child's ticket `squad:passed` and treat that as "done" — never close the issue (the user owns close timing, like merge timing). A `squad:passed` ticket is excluded from every re-scan (see the frontier definition above), so pumping never re-dispatches a ticket the squad already completed. Prefer the simpler **snapshot** mode (read the frontier once, don't pump) unless the ticket chain is long.
-
-### Drain mode (`/squad-drain`)
-
-Drain mode is fleet's serial, non-interactive variant for continuously working a tracker queue. It reuses every mechanism below — worktree creation, concurrent dispatch, monitoring, pumping, the aggregate report, resume — and changes only the entry, the defaults, and the empty/end handling so the command is safe to wrap in `/loop`. `/squad-drain` sets `mode: "drain"` on the fleet; `fleet.json.mode` records it.
-
-- **Task source — tracker frontier only.** Collect the frontier exactly as "Tracker frontier mode" above. Drain has **no** interactive/file/paste fallback (unlike Setup's sources). If `docs/agents/issue-tracker.md` is absent, print one line — "drain requires an issue-tracker (Matt Pocock `/to-tickets`); none configured — use `/squad-fleet` for manual task lists." — and **stop**. Never prompt for tasks.
-- **Defaults differ from fleet.** `max_parallel` defaults to **1** (serial drain, one ticket at a time), overridable with `--max=N`. **Pumping is ON by default** (the point of a drain is to follow the chain as blockers clear); `--no-pump` reverts to a single snapshot pass.
-- **Empty frontier → clean silent exit.** If the frontier is empty at start, print one line — "Frontier empty — nothing to drain." — and stop with success. No prompt, no fallback. This is what makes `/loop <interval> /squad-drain` cheap: an empty tick is a no-op, not a question.
-- **No interactive tail.** Drain skips the end-of-fleet prompts (the wiki-ingest offer and the worktree-cleanup prompt under "Cleanup" and "Wiki & fleet"). It writes the aggregate report as usual and surfaces the merge/BLOCKED/cleanup pointers as text for the human to act on outside the loop — nothing blocks on input.
-- **Continuous watch.** `/squad-drain` alone drains the current frontier once and exits. For a standing watch, pair it with the built-in `/loop`: `/loop 5m /squad-drain` re-invokes it every 5 minutes — each tick drains whatever is on the frontier and exits, an empty frontier is a silent no-op, and tickets added between ticks are picked up on the next one. No bespoke poller; `/loop` owns the recurrence, drain owns one pass.
-
-Everything else (base branch, `fleet.json` tracking, BLOCKED-doesn't-stall-siblings, resume protocol) behaves exactly as in the sections below.
-
-### Worktree creation
-
-For each task:
-
-1. Slug the task to ~30 chars kebab-case for the worktree directory name.
-2. Determine the base branch (default `main`, or read from config).
-3. Run: `git worktree add -b fleet/<fleet_id>/<slug> .happysquad/worktrees/<fleet_id>/<slug> <base-branch>`
-4. Record the worktree path and branch in `fleet.json.tasks[i]`.
-
-If worktree creation fails (branch exists, dirty index, etc.), surface to the user and stop. Don't proceed with a partial fleet — that's how you get half-finished runs.
-
-### Concurrent dispatch
-
-Respect `max_parallel`. The orchestrator runs at most N child loops concurrently:
-
-1. Sort tasks (any order — they're independent by definition).
-2. Dispatch the first `min(N, total_tasks)` children:
-   - For each child, launch `/happysquad-loop` **via the Agent tool** with the worktree path passed as the working directory. Each child runs its own full state machine.
-   - All child dispatches go in a single message with multiple Agent tool calls.
-   - Before each dispatch, run `mkdir -p <worktree>/.happysquad && touch <worktree>/.happysquad/.dispatched`. The liveness check below then sees the child as active until it writes its own state.
-3. **Wait for children in this turn.** Never end the turn while a child is in flight (same rule as squad-loop §2 step 3). A child is done when `<worktree>/.happysquad/state.json` reaches `COMPLETE` or `BLOCKED`. If the Agent tool returns the child's result, read that file. If it returns an async handle, poll with a foreground Bash call (`timeout: 600000`), and repeat the call while it prints `WAITING`:
-
-   ```bash
-   F=.happysquad/fleets/<fleet_id>
-   for i in $(seq 30); do            # ~5 min per call
-     touch "$F/.orchestrator"
-     for wt in <in-flight worktrees>; do
-       grep -qE '"current_state": *"(COMPLETE|BLOCKED)"' "$wt/.happysquad/state.json" 2>/dev/null && { echo "DONE $wt"; exit 0; }
-       [ -z "$(find "$wt/.happysquad" -mmin -30 -print -quit 2>/dev/null)" ] && { echo "QUIET $wt"; exit 0; }
-     done
-     sleep 10
-   done
-   echo WAITING
-   ```
-
-   - `DONE` → update `fleet.json` (see Monitoring) and immediately dispatch the next pending task to keep N children in flight.
-   - `QUIET` → nothing under the child's `.happysquad/` changed for 30 minutes: the child stopped without finishing. Stop the child agent if the runtime gave a handle, then re-dispatch `/squad-resume` once in the same worktree and record `"redispatched": true`; the child's loop continues from its own state. A child that goes quiet again → `"status": "stalled"` in `fleet.json`. A stalled child does not stall the fleet; report it like a BLOCKED child.
-4. Repeat until all tasks are `complete`, `BLOCKED`, `stalled`, or the fleet itself is aborted.
-
-### Monitoring
-
-After each child completes, the parent agent reads the child's `.happysquad/state.json` (inside the child's worktree) to get its final state, verdict, iteration count, and files-changed list. Write that into `fleet.json.tasks[i]`.
-
-`status` is one of `pending`, `in_progress`, `complete`, `BLOCKED`, or `stalled` (quiet twice — see Concurrent dispatch step 3). A `stalled` child is reported like a BLOCKED one: its worktree is left in place for inspection.
-
-If a child returns BLOCKED, the fleet does NOT abort other children — they continue. BLOCKED children are surfaced in the aggregate report; the user decides how to handle each.
-
-### Aggregate report
-
-When `status` transitions to `complete` (all children resolved):
-
-1. Write `.happysquad/fleets/<fleet_id>/aggregate-report.md`:
-
-```markdown
-# Fleet <fleet_id> — aggregate report
-
-Started: <timestamp>
-Ended: <timestamp>
-Total tasks: N
-Passed: P · Blocked: B · Failed: F
-
-## Results
-
-| Slug          | Verdict | Iterations | Files changed | Branch                                      | Notes                  |
-|---------------|---------|------------|---------------|---------------------------------------------|------------------------|
-| add-export    | PASS    | 2          | 8             | fleet/20260520-…/add-export                 | ready to merge         |
-| update-billing| PASS    | 3          | 5             | fleet/20260520-…/update-billing             | ready to merge         |
-| infra-bump    | BLOCKED | 5 (cap)    | 2             | fleet/20260520-…/infra-bump                 | EF Core 9 migration breaks tests — see BLOCKED.md |
-
-## Merge plan
-
-For each PASS task, suggested merge command:
-```bash
-git checkout main
-git merge --no-ff fleet/20260520-…/add-export
-git merge --no-ff fleet/20260520-…/update-billing
-```
-
-Note: merging PASS branches in fleet does NOT guarantee they integrate cleanly with each other in main — fleet siblings are isolated. Run any cross-task integration tests after merging.
-
-## Blocked tasks
-
-### infra-bump
-<paste of .happysquad/runs/<run-id>/BLOCKED.md from the child's worktree>
-```
-
-2. Mark `fleet.json.status: "complete"`.
-
-### Cleanup
-
-After the user merges (or explicitly closes the fleet), prompt:
-
-> "Fleet complete. Remove worktrees? (Branches stay; worktree directories are removed.) — yes / no / keep-failed-only"
-
-- yes → `git worktree remove --force .happysquad/worktrees/<fleet_id>/<slug>` for each task.
-- keep-failed-only → remove only PASS task worktrees; keep BLOCKED ones for inspection.
-- no → leave everything in place.
-
-Never auto-remove worktrees without asking. The user may want to inspect a BLOCKED run's working state.
-
-## Concurrency limits
-
-`max_parallel` (default 4) controls how many child loops run simultaneously. Higher is faster but consumes more tokens and risks rate limits. The orchestrator should:
-
-- Never exceed `max_parallel`.
-- Detect if Claude Agent Team rate-limits a dispatch — if any child fails to start due to capacity, pause new dispatches for 30 seconds and retry.
-- Allow override via `/squad-fleet --max=N`.
-
-## Wiki & fleet
-
-Each child can independently offer its post-completion wiki ingest (see squad-loop's wiki-offer section). The fleet orchestrator surfaces a combined offer at the end:
-
-> "Fleet complete. Ingest <K> successful runs into the wiki? — yes (all) / pick / no"
-
-If yes, dispatch `/wiki-ingest --latest-run` for each PASS task (one at a time, sequentially — wiki ingests are NOT parallel-safe because they touch the shared `knowledge/wiki/index.md`).
-
-## Stack profile & fleet
-
-If the project has no `stack-profile.md`, run `/squad-detect` ONCE at the fleet root before spawning children. Children inherit the profile (they share the same project — only worktrees differ, not the project's tech stack).
-
-## What this skill must NOT do
-
-- Do not auto-merge children's branches into main. The user owns merge timing.
-- Do not delete worktrees without asking.
-- Do not exceed `max_parallel` even when faster-looking.
-- Do not run cross-task assumption checks — fleet siblings are by definition independent. If they share assumptions, they should be in-task parallel workstreams of a single loop, not fleet siblings.
-- Do not let one BLOCKED child stall the fleet. Other children keep running.
-
-## Token discipline
-
-- Each child's full state stays in the child's worktree. The fleet only needs summaries.
-- `fleet.json` is the audit trail; don't duplicate run artifacts.
-- The parent agent that orchestrates the fleet reads each child's state.json once at completion — not continuously.
-
-## Resuming an interrupted fleet
-
-If `fleet.json` exists with `status: "in_progress"`:
-
-1. Ask the user: "Fleet `<fleet_id>` is in progress (P completed, Q running, R pending). Resume / Abort / Status-only?"
-2. On Resume: first reconcile every `in_progress` child against its worktree. Never re-run a child that finished.
-   - `<worktree>/.happysquad/state.json` is `COMPLETE` or `BLOCKED` → record it per Monitoring.
-   - Anything under `<worktree>/.happysquad/` changed in the last 30 minutes → the child may still be running; treat it as in flight and wait per Concurrent dispatch step 3.
-   - Otherwise → re-dispatch it per the `QUIET` rule.
-
-   Then dispatch pending children to fill up to `max_parallel`.
-3. On Abort: mark `fleet.json.status: "aborted"`, leave worktrees in place, generate a partial aggregate report.
+- One `hs fleet` command per step; read every fact from its JSON.
+- Do not open child worktrees, read their state, or run their builds yourself.
+- Siblings are isolated by construction: PASS branches are not proven to integrate with each other;
+  say so when you print the merge commands.
+- Tracker frontier / drain modes are not in this version (1.1).

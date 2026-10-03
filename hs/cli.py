@@ -229,6 +229,35 @@ def cmd_redgreen(args):
     _out(res)
 
 
+def cmd_fleet(args):
+    from . import fleet as F
+    root = _root(args)
+    cfg = C.load(root)
+    if args.sub == "start":
+        tasks = []
+        if args.tasks_file:
+            for line in open(os.path.join(root, args.tasks_file)):
+                line = line.strip().lstrip("-*").strip()
+                if line and not line.startswith("#"):
+                    tasks.append(line)
+        tasks += args.task or []
+        act = F.start(root, tasks, cfg, max_parallel=args.max, lite=args.lite)
+        _out(act)
+        sys.exit(_exit_for(act))
+    fid = args.fleet or F.current_fleet(root)
+    if not fid:
+        _out({"action": "error", "message": "no current fleet"})
+        sys.exit(2)
+    if args.sub == "advance":
+        _out(F.advance(root, fid, cfg))
+    elif args.sub == "wait":
+        _out(F.wait(root, fid, cfg, timeout=args.timeout, interval=args.interval))
+    elif args.sub == "status":
+        _out(F.summary(root, fid))
+    elif args.sub == "cleanup":
+        _out(F.cleanup(root, fid, cfg, keep_failed=not args.all))
+
+
 def cmd_validate(args):
     root = _root(args)
     out = S.read_json(os.path.join(root, args.out_file))
@@ -433,6 +462,25 @@ def main(argv=None):
     rg.add_argument("--link", nargs="*")
     rg.add_argument("--out")
     rg.set_defaults(fn=cmd_redgreen)
+
+    fl = sub.add_parser("fleet")
+    fls = fl.add_subparsers(dest="sub", required=True)
+    fs = fls.add_parser("start")
+    fs.add_argument("task", nargs="*", help="task descriptions (or use --tasks-file)")
+    fs.add_argument("--tasks-file")
+    fs.add_argument("--max", type=int)
+    fs.add_argument("--lite", action="store_true")
+    for name in ("advance", "status"):
+        p = fls.add_parser(name)
+        p.add_argument("--fleet")
+    fw = fls.add_parser("wait")
+    fw.add_argument("--fleet")
+    fw.add_argument("--timeout", type=int, default=540)
+    fw.add_argument("--interval", type=float, default=5.0)
+    fc = fls.add_parser("cleanup")
+    fc.add_argument("--fleet")
+    fc.add_argument("--all", action="store_true", help="remove BLOCKED/stalled worktrees too")
+    fl.set_defaults(fn=cmd_fleet)
 
     v = sub.add_parser("validate")
     v.add_argument("out_file")
