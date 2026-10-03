@@ -35,12 +35,30 @@ def _frontmatter(path):
     return meta, body.lstrip("\n")
 
 
+ROLE_PROMPTS = {
+    # Headless agents get a short role prompt; the rendered dispatch prompt (prompts/*.md) carries the
+    # contract. The 0.16 agents/*.md bodies are NOT used here: they describe marker lines, brainstorm
+    # modes and artifact paths that contradict the hs contract (seen in the first headless smoke: the
+    # architecter printed DESIGN_READY and wrote progress.md instead of out.json).
+    "architecter": "You design before code exists. Read the repo first; never invent paths. Produce exactly the artifacts the task prompt names and nothing else. Do not write code, run builds or tests, or commit.",
+    "implementer": "You turn a design into working code inside the files you own. Match the repo's conventions. Run the build yourself. No new test files, no commits, no edits outside owned files.",
+    "tester": "You write and run tests that pin the acceptance criteria. Assert specific values; for cancel/delete/lookup assert against ids the test itself created. Never modify production code.",
+    "reviewer": "You are the chief reviewer: read the whole diff yourself, cite file:line for every finding, give each a verify command or `manual`, never edit code, never emit a verdict (the engine computes it).",
+    "specialist": "You review exactly one axis against its checklist. Concrete mechanism and file:line per finding; out-of-scope notes go in the report only. Never edit code.",
+}
+
+
 def agents_json(agent):
-    """Build the `--agents` object for one agent from agents/<agent>.md (name, description, prompt, tools, model)."""
+    """Build the `--agents` object for one agent: tools/model from agents/<agent>.md frontmatter, role prompt from ROLE_PROMPTS."""
     path = os.path.join(PLUGIN_ROOT, "agents", "%s.md" % agent)
-    meta, body = _frontmatter(path)
+    meta = _frontmatter(path)[0] if os.path.isfile(path) else {}
     tools = [t.strip() for t in meta.get("tools", "").split(",") if t.strip()]
-    spec = {"description": (meta.get("description") or agent).splitlines()[0][:200], "prompt": body}
+    if agent == "specialist" and not tools:
+        tools = ["Read", "Grep", "Glob", "Bash", "Write"]
+    if agent in ("reviewer", "specialist") and "Write" not in tools:
+        tools.append("Write")  # review.md / out.json must be writable (0.16 frontmatter omits it)
+    spec = {"description": (meta.get("description") or agent).splitlines()[0][:200],
+            "prompt": ROLE_PROMPTS.get(agent, "You are the %s." % agent)}
     if tools:
         spec["tools"] = tools
     if meta.get("model"):
@@ -66,11 +84,26 @@ def claude_argv(agent, model, prompt_text, cfg, out_file=None):
 
 # --- worktree isolation ----------------------------------------------------------
 
+def worktree_base(root):
+    """Where isolated run worktrees live: a sibling dir of the repo, never under .git/.
+
+    Claude Code treats any path containing a `.git/` segment as a sensitive file and refuses
+    every Write/Edit/Bash redirect into it, so a worktree under <git-common-dir> is unusable
+    by agents. `config.headless.worktree_dir` overrides (absolute or repo-relative).
+    """
+    cfg_dir = (C.load(root).get("headless") or {}).get("worktree_dir")
+    if cfg_dir:
+        return cfg_dir if os.path.isabs(cfg_dir) else os.path.join(root, cfg_dir)
+    top = gitutil.git(root, "rev-parse", "--show-toplevel").strip()
+    return os.path.join(os.path.dirname(top), os.path.basename(top) + "-hs-wt")
+
+
 def isolate(root, run_id):
     """Create the run's worktree (spec §11, Q2) and return its path; the run lives there."""
-    wt = os.path.join(gitutil.common_dir(root), "happysquad", "wt", run_id)
+    wt = os.path.join(worktree_base(root), run_id)
     branch = "hs/%s" % run_id
     if not os.path.isdir(wt):
+        os.makedirs(os.path.dirname(wt), exist_ok=True)
         gitutil.git(root, "worktree", "add", "-q", "-b", branch, wt, "HEAD")
         # the run's config/profile travel with it (gitignored in the main tree)
         src = os.path.join(root, ".happysquad")
@@ -92,7 +125,8 @@ def _run_one(root, d, cfg, log_dir):
     log = os.path.join(root, log_dir, "claude-%s.jsonl" % os.path.basename(os.path.dirname(d["out_file"])))
     os.makedirs(os.path.dirname(log), exist_ok=True)
     with open(log, "w") as lf:
-        p = subprocess.Popen(argv, cwd=root, stdout=lf, stderr=subprocess.STDOUT, env=env, start_new_session=True)
+        p = subprocess.Popen(argv, cwd=root, stdin=subprocess.DEVNULL, stdout=lf, stderr=subprocess.STDOUT,
+                             env=env, start_new_session=True)
     return p
 
 

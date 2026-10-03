@@ -39,6 +39,8 @@ DEFAULTS = {
             "Bash(git commit:*)", "Bash(rm -rf:*)", "Bash(curl:*)", "Bash(wget:*)", "Bash(sudo:*)", "Bash(gh:*)",
         ],
         "isolate": "worktree",
+        "worktree_dir": None,  # default: <repo-parent>/<repo-name>-hs-wt/<run-id>; never under .git/
+        "poll_interval": 3,
     },
     "hooks": {"stop_progress_nudge": False},
     "wiki": {"offer": True},

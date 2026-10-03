@@ -167,16 +167,28 @@ class HeadlessFakeDriver(unittest.TestCase):
         self.w = _toy_repo()
 
     def tearDown(self):
+        base = os.path.join(os.path.dirname(self.w), os.path.basename(self.w) + "-hs-wt")
+        shutil.rmtree(base, ignore_errors=True)
         subprocess.run(["git", "worktree", "prune"], cwd=self.w, capture_output=True)
         shutil.rmtree(self.w, ignore_errors=True)
+
+    def test_role_prompts_not_016_bodies(self):
+        for a in ("architecter", "implementer", "tester", "reviewer", "specialist"):
+            p = drivers.agents_json(a)[a]["prompt"]
+            self.assertNotIn("DESIGN_READY", p)
+            self.assertNotIn("Brainstorm mode", p)
+            self.assertLess(len(p), 600)
+        self.assertIn("Write", drivers.agents_json("reviewer")["reviewer"]["tools"])
 
     def test_isolated_worktree_run_completes_and_main_tree_untouched(self):
         before = subprocess.run(["git", "status", "--porcelain"], cwd=self.w, capture_output=True, text=True).stdout
         env = {"HS_CLAUDE": os.path.join(ROOT, "evals", "fake_claude.py"), "FAKE_SCENARIO": "pass-first"}
         r = _hs(self.w, "run", "start", "add mul", "--driver", "fake", env=env)
         self.assertEqual((r["action"], r["status"]), ("done", "COMPLETE"), r)
-        self.assertTrue(r["worktree"].startswith(os.path.realpath(os.path.join(self.w, ".git")) ) or "/happysquad/wt/" in r["worktree"])
+        self.assertNotIn("/.git/", r["worktree"] + "/", "worktree must not live under .git (Claude refuses writes there)")
+        self.assertTrue(r["worktree"].startswith(os.path.dirname(os.path.realpath(self.w))) or r["worktree"].startswith(os.path.dirname(self.w)), r["worktree"])
         self.assertTrue(r["branch"].startswith("hs/"))
+        self.wt_to_clean = r["worktree"]
         after = subprocess.run(["git", "status", "--porcelain"], cwd=self.w, capture_output=True, text=True).stdout
         self.assertEqual(before, after, "main working tree must be untouched")
         self.assertNotIn("mul", open(os.path.join(self.w, "src", "calc.js")).read())
