@@ -1,0 +1,13 @@
+{
+  "_expect": "COMPLETE",
+  "_note": "Run with RUN_FLAGS=--lite (run_fake.sh appends it to `hs run start`). ARCHITECT-i1 deliberately returns size M (not S) so this would NOT be lite without the explicit flag -- proving --lite forces st['lite']=True from start() itself (hs/machine.py start(): lite=bool(lite)), independent of the auto-lite-on-size-S heuristic. lite forces review_mode effectively 'single' in the RISK step (_step(): mode = 'single' if (lite or review_mode=='single') else review_mode), so no CONFLICT/RISK/SPECIALIST dispatch happens even though review_mode defaults to split-on-risk. Single workstream already, so no parallel-collapse to observe. Dispatches: ARCH, IMPL, TEST, REVIEW = 4.",
+  "ARCHITECT-i1": {
+    "out": {
+      "phase": "ARCHITECT", "size": "M", "design": "design.md", "assumptions": [],
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}],
+      "workstreams": [{"name": "main", "owned": ["src/calc.js"], "depends_on": [], "ac": ["AC-1"]}],
+      "test_owned": {"main": ["test/mul.test.js"]}
+    },
+    "artifacts": {"design.md": "# Design\n\nAC-1: mul(a,b) returns a*b.\n"}
+  }
+}

@@ -482,6 +482,9 @@ def advance(root, run_id, cfg):
                 act = _after_gates(root, rdir, st, cfg, key, g, result)
                 if act is not None:
                     return act
+                # _after_gates mutates workstream status in memory; persist it even when no
+                # transition follows (a lone gate in a dependency wave) or the ws strands at "dispatched"
+                S.save_state(rdir, st)
             elif not _pid_alive(g.get("pid")):
                 _spawn_gates(root, rdir, st, os.path.join(rdir, key), ws=g.get("ws"), phase=g.get("phase"))
                 S.commit(rdir, st, "gates.start", phase=g.get("phase"), iteration=st["iteration"], data={"respawn": True})
@@ -523,11 +526,13 @@ def advance(root, run_id, cfg):
             if act is not None:
                 return act
         if st.get("pending") or st.get("gates"):
+            S.save_state(rdir, st)
             return next_action(root, run_id, cfg)
         # 3. internal transitions
         act = _step(root, rdir, st, cfg)
         if act is not None:
             return act
+        S.save_state(rdir, st)
     return next_action(root, run_id, cfg)
 
 
@@ -897,7 +902,7 @@ def _after_review(root, rdir, st, cfg, out, pd):
     verifiable = all(b.get("verify") not in (None, "", "manual", "untrusted") for b in blockers)
     if was_delta:
         # delta FAIL: stay inner while passes remain, else fall to a full round
-        if route in ("implementer", "tester") and verifiable and st["inner_pass"] < st["inner_cap"]:
+        if route in ("implementer", "tester") and verifiable and st["inner_pass"] + 1 < st["inner_cap"]:
             return _enter_inner(root, rdir, st, cfg, blockers, route, bump=False)
         return _full_round(root, rdir, st, cfg, route)
     if route in ("implementer", "tester") and verifiable and not st.get("lite_no_inner"):
@@ -955,7 +960,8 @@ def _inner_retry(root, rdir, st, cfg, reason, result):
     tail = next((c.get("tail", "")[-600:] for c in result.get("cmds", []) if c.get("exit") != 0), "")
     S.atomic_write(os.path.join(rdir, "feedback.md"), fb + "\n## Failing checks (inner pass %d)\n%s\n%s\n" % (
         st["inner_pass"], "\n".join("- %s: verify still fails" % k for k in fails) or "- build/test failed", ("```\n%s\n```" % tail) if tail else ""))
-    if st["inner_pass"] < st["inner_cap"]:
+    # inner_cap = max fix passes per review round: passes are numbered 0..inner_cap-1
+    if st["inner_pass"] + 1 < st["inner_cap"]:
         st["inner_pass"] += 1
         st["inner_done"] = []
         st["state"] = "INNER_FIX"

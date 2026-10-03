@@ -1,0 +1,34 @@
+{
+  "_expect": "COMPLETE",
+  "_note": "REVIEW-i1 blocker is verifiable (grep, not manual) and routes implementer -> engine enters INNER_FIX (bump=True, iteration 2) instead of a full round. INNER_FIX-i2-p0-implementer fixes the bug (falls to the happy() IMPLEMENT path, which regex-replaces an existing buggy mul() with the correct body) -> FIX gate verify passes -> REVIEW-i2-p0 (delta) clean -> COMPLETE at iteration 2. Dispatches: ARCH, IMPL, TEST, REVIEW, FIX-impl, REVIEW-delta = 6.",
+  "IMPLEMENT-i1": {
+    "out": {"phase": "IMPLEMENT", "workstream": null, "files": ["src/calc.js"], "build_cmds": [], "unmet_ac": []},
+    "files": {
+      "src/calc.js": "export function add(a, b) {\n  return a + b;\n}\n\nexport function sub(a, b) {\n  return a - b;\n}\n\nexport function mul(a, b) {\n  return a + b;\n}\n"
+    }
+  },
+  "TEST-i1": {
+    "out": {
+      "phase": "TEST", "workstream": null, "test_cmds": [], "coverage_report": null,
+      "test_files": ["test/mul.test.js"], "new_tests": ["test/mul.test.js"],
+      "ac_map": {"AC-1": ["test/mul.test.js::mul"]}, "findings": []
+    },
+    "files": {
+      "test/mul.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { mul } from \"../src/calc.js\";\n\ntest(\"mul\", () => {\n  assert.equal(typeof mul(2, 3), \"number\");\n});\n"
+    },
+    "redgreen": {"rows": [{"test": "test/mul.test.js", "kind": "compile", "evidence": "SyntaxError: The requested module does not provide an export named 'mul'"}]}
+  },
+  "REVIEW-i1": {
+    "out": {
+      "phase": "REVIEW", "mode": "single", "report": "review.md",
+      "findings": [
+        {"id": "F-1", "severity": "blocker", "tag": "REQ", "file": "src/calc.js", "desc": "mul(a,b) returns a+b, not a*b", "route": "implementer", "verify": "grep -qF \"a * b\" src/calc.js"}
+      ]
+    },
+    "artifacts": {"review.md": "# Review\n\nBlocker: mul returns a+b, not a*b.\n"}
+  },
+  "REVIEW-i2-p0": {
+    "out": {"phase": "REVIEW", "mode": "delta", "report": "review.md", "findings": [], "confirmed_fixes": ["F-1"]},
+    "artifacts": {"review.md": "# Review (delta)\n\nF-1 confirmed fixed.\n"}
+  }
+}

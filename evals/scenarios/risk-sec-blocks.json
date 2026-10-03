@@ -1,0 +1,53 @@
+{
+  "_expect": "COMPLETE",
+  "_note": "Sibling of risk-sec.json: the chief does NOT override SEC-1, so it merges into REVIEW-i1's blockers (route implementer, verify manual, non-verifiable -> full round, not inner-fix) -> iteration 2. IMPLEMENT-i2 is happy() default (touches only calc.js; auth.js is left as-is -- this scenario tests the routing/convergence path, not that the agent actually hardens the code). TEST-i2 needs an explicit override: happy() only maps AC-1, and this workstream's AC list is [AC-1, AC-2], so an unmodified happy() TEST-i2 would fail semantic_test() validation (ac_map missing AC-2) and loop on validation retries instead of completing. SPECIALIST-i2-sec is happy() default (clean) since src/auth.js is unchanged but still risk-matched by path. Dispatches: ARCH, IMPL, TEST, SPECIALIST-sec, REVIEW (i1) + IMPL, TEST, SPECIALIST-sec, REVIEW (i2) = 9.",
+  "ARCHITECT-i1": {
+    "out": {
+      "phase": "ARCHITECT", "size": "M", "design": "design.md", "assumptions": [],
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}, {"id": "AC-2", "text": "checkToken(t) validates a token"}],
+      "workstreams": [{"name": "main", "owned": ["src/calc.js", "src/auth.js"], "depends_on": [], "ac": ["AC-1", "AC-2"]}],
+      "test_owned": {"main": ["test/mul.test.js", "test/auth.test.js"]}
+    },
+    "artifacts": {"design.md": "# Design\n\nAC-1: mul(a,b). AC-2: checkToken(t).\n\nFiles: src/calc.js, src/auth.js\n"}
+  },
+  "IMPLEMENT-i1": {
+    "out": {"phase": "IMPLEMENT", "workstream": null, "files": ["src/calc.js", "src/auth.js"], "build_cmds": [], "unmet_ac": []},
+    "files": {
+      "src/calc.js": "export function add(a, b) {\n  return a + b;\n}\n\nexport function sub(a, b) {\n  return a - b;\n}\n\nexport function mul(a, b) {\n  return a * b;\n}\n",
+      "src/auth.js": "export function checkToken(t) {\n  return t === \"secret\";\n}\n"
+    }
+  },
+  "TEST-i1": {
+    "out": {
+      "phase": "TEST", "workstream": null, "test_cmds": [], "coverage_report": null,
+      "test_files": ["test/mul.test.js", "test/auth.test.js"], "new_tests": ["test/mul.test.js", "test/auth.test.js"],
+      "ac_map": {"AC-1": ["test/mul.test.js::mul"], "AC-2": ["test/auth.test.js::checkToken"]}, "findings": []
+    },
+    "files": {
+      "test/mul.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { mul } from \"../src/calc.js\";\n\ntest(\"mul\", () => {\n  assert.equal(mul(3, 4), 12);\n});\n",
+      "test/auth.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { checkToken } from \"../src/auth.js\";\n\ntest(\"checkToken\", () => {\n  assert.equal(checkToken(\"secret\"), true);\n  assert.equal(checkToken(\"wrong\"), false);\n});\n"
+    },
+    "redgreen": {"rows": [
+      {"test": "test/mul.test.js", "kind": "compile", "evidence": "SyntaxError: The requested module does not provide an export named 'mul'"},
+      {"test": "test/auth.test.js", "kind": "compile", "evidence": "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '../src/auth.js'"}
+    ]}
+  },
+  "SPECIALIST-i1-sec": {
+    "out": {
+      "phase": "SPECIALIST", "axis": "sec", "report": "sec.md",
+      "findings": [{"id": "SEC-1", "severity": "blocker", "file": "src/auth.js", "line": 2, "desc": "hardcoded secret comparison, not constant-time and trivially guessable"}]
+    },
+    "artifacts": {"sec.md": "# sec review\n\nSEC-1 (blocker): hardcoded secret comparison in checkToken().\n"}
+  },
+  "REVIEW-i1": {
+    "out": {"phase": "REVIEW", "mode": "single", "report": "review.md", "findings": []},
+    "artifacts": {"review.md": "# Review\n\nNo chief-level findings; SEC-1 from the sec specialist is not overridden.\n"}
+  },
+  "TEST-i2": {
+    "out": {
+      "phase": "TEST", "workstream": null, "test_cmds": [], "coverage_report": null,
+      "test_files": ["test/mul.test.js", "test/auth.test.js"], "new_tests": [],
+      "ac_map": {"AC-1": ["test/mul.test.js::mul"], "AC-2": ["test/auth.test.js::checkToken"]}, "findings": []
+    }
+  }
+}

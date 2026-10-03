@@ -21,9 +21,25 @@ SCENARIOS = {
     "validation-blocked": 3,
     "gate-build-fail": 3,
     "review-fail-then-pass": 7,
-    "blocked-cap": 10,
-    "no-new-tests": 4,
+    "blocked-cap": 11,  # P1a: converge() zero-progress rule adds one more full round (spec §8.3) before BLOCKED
+    "no-new-tests": 6,  # v1.0 G-COV now enforces per-file coverage (0.16 didn't); costs one extra TEST+REVIEW round
     "tests-fail-with-findings": 7,
+    # P1a additions (spec §4-§8): inner-fix loop, convergence, parallel waves, conflict gate,
+    # risk-split specialists, lite.
+    "fail-inner-fix": 6,
+    "inner-cap-fallback": 9,  # inner_cap=2 = two fix passes (p0, p1), then a full round
+    "repeat-escalate": 11,
+    "parallel-2ws": 6,
+    "parallel-deps": 6,  # util depends_on calc: IMPLEMENT and TEST each come as two sequential single dispatches
+    "ownership-violation": 9,
+    "risk-sec": 5,
+    "risk-sec-blocks": 9,
+    "lite-forced": 4,
+}
+
+# extra environment for a scenario's run_fake.sh invocation (e.g. RUN_FLAGS=--lite)
+SCENARIO_ENV = {
+    "lite-forced": {"RUN_FLAGS": "--lite"},
 }
 
 
@@ -34,7 +50,8 @@ class TestE2E(unittest.TestCase):
 
 def _make_test(name, expect_dispatches):
     def test(self):
-        proc = subprocess.run(["bash", RUN_FAKE, name], capture_output=True, text=True, timeout=240)
+        env = dict(os.environ, **SCENARIO_ENV.get(name, {}))
+        proc = subprocess.run(["bash", RUN_FAKE, name], capture_output=True, text=True, timeout=240, env=env)
         lines = proc.stdout.strip().splitlines()
         tail = "\n".join(lines[-3:])
         self.assertEqual(proc.returncode, 0, "scenario %s failed:\n%s\n%s" % (name, tail, proc.stderr[-2000:]))

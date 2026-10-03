@@ -1,0 +1,16 @@
+{
+  "_expect": "COMPLETE",
+  "_note": "Same as parallel-2ws but util depends_on calc, and util.js imports mul from calc.js (fake_agent.py's happy() IMPLEMENT writes the import once calc.js already has mul — see UTIL_SRC_DEP). ready_workstreams() only releases util once calc's impl/test are 'done', so IMPLEMENT and TEST each come as two sequential single dispatches (wave 1 calc, wave 2 util), never dispatch_many. Observed order below.",
+  "ARCHITECT-i1": {
+    "out": {
+      "phase": "ARCHITECT", "size": "M", "design": "design.md", "assumptions": [],
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}, {"id": "AC-2", "text": "clamp(x,lo,hi) clamps x into [lo,hi]"}],
+      "workstreams": [
+        {"name": "calc", "owned": ["src/calc.js"], "depends_on": [], "ac": ["AC-1"]},
+        {"name": "util", "owned": ["src/util.js"], "depends_on": ["calc"], "ac": ["AC-2"]}
+      ],
+      "test_owned": {"calc": ["test/mul.test.js"], "util": ["test/clamp.test.js"]}
+    },
+    "artifacts": {"design.md": "# Design\n\nAC-1: mul(a,b) returns a*b (workstream calc).\nAC-2: clamp(x,lo,hi) (workstream util, depends on calc for mul()).\n\nFiles: src/calc.js, src/util.js, test/mul.test.js, test/clamp.test.js\n"}
+  }
+}

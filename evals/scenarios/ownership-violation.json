@@ -1,0 +1,56 @@
+{
+  "_expect": "COMPLETE",
+  "_note": "Adjusted from the original plan: having util's IMPLEMENT also write src/calc.js would NOT trip hs/gates.py ownership_check() (hs/machine.py _step, CONFLICT branch) -- that check is purely glob-based over changed paths vs each workstream's owned/test_owned globs, so src/calc.js still resolves to exactly one owner ('calc') regardless of which agent physically touched it. To genuinely exercise the 'unowned' violation path, IMPLEMENT-i1-util instead writes a stray src/scratch.js that is in NO workstream's owned/test_owned list. CONFLICT's ownership_check() flags it (owners=[], reason=unowned) -> _conflict_fail() -> iteration 2, state=ARCHITECT (matches machine.py _conflict_fail exactly: iteration+=1, arch_iterations append, workstreams reset to pending, state=ARCHITECT). ARCHITECT-i2 collapses to one workstream owning all three paths; IMPLEMENT-i2/TEST-i2 are explicit (single mode's happy() only knows calc.js/mul) -> REVIEW-i2 clean -> COMPLETE at iteration 2. Dispatches: ARCH-i1, IMPL-calc+IMPL-util (dispatch_many), TEST-calc+TEST-util (dispatch_many) [conflict fails before REVIEW], ARCH-i2, IMPL-i2, TEST-i2, REVIEW-i2 = 9.",
+  "ARCHITECT-i1": {
+    "out": {
+      "phase": "ARCHITECT", "size": "M", "design": "design.md", "assumptions": [],
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}, {"id": "AC-2", "text": "clamp(x,lo,hi) clamps x into [lo,hi]"}],
+      "workstreams": [
+        {"name": "calc", "owned": ["src/calc.js"], "depends_on": [], "ac": ["AC-1"]},
+        {"name": "util", "owned": ["src/util.js"], "depends_on": [], "ac": ["AC-2"]}
+      ],
+      "test_owned": {"calc": ["test/mul.test.js"], "util": ["test/clamp.test.js"]}
+    },
+    "artifacts": {"design.md": "# Design\n\nAC-1: mul(a,b) (workstream calc).\nAC-2: clamp(x,lo,hi) (workstream util).\n"}
+  },
+  "IMPLEMENT-i1-util": {
+    "out": {"phase": "IMPLEMENT", "workstream": "util", "files": ["src/util.js", "src/scratch.js"], "build_cmds": [], "unmet_ac": []},
+    "files": {
+      "src/util.js": "export function clamp(x, lo, hi) {\n  return Math.min(Math.max(x, lo), hi);\n}\n",
+      "src/scratch.js": "// debug leftover, not part of any workstream's owned files\n"
+    }
+  },
+  "ARCHITECT-i2": {
+    "out": {
+      "phase": "ARCHITECT", "size": "M", "design": "design.md", "assumptions": [],
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}, {"id": "AC-2", "text": "clamp(x,lo,hi) clamps x into [lo,hi]"}],
+      "workstreams": [
+        {"name": "all", "owned": ["src/calc.js", "src/util.js", "src/scratch.js"], "depends_on": [], "ac": ["AC-1", "AC-2"]}
+      ],
+      "test_owned": {"all": ["test/mul.test.js", "test/clamp.test.js"]}
+    },
+    "artifacts": {"design.md": "# Design (revised after CONFLICT)\n\nOne workstream owns src/calc.js, src/util.js, src/scratch.js.\n"}
+  },
+  "IMPLEMENT-i2": {
+    "out": {"phase": "IMPLEMENT", "workstream": null, "files": ["src/calc.js", "src/util.js"], "build_cmds": [], "unmet_ac": []},
+    "files": {
+      "src/calc.js": "export function add(a, b) {\n  return a + b;\n}\n\nexport function sub(a, b) {\n  return a - b;\n}\n\nexport function mul(a, b) {\n  return a * b;\n}\n",
+      "src/util.js": "export function clamp(x, lo, hi) {\n  return Math.min(Math.max(x, lo), hi);\n}\n"
+    }
+  },
+  "TEST-i2": {
+    "out": {
+      "phase": "TEST", "workstream": null, "test_cmds": [], "coverage_report": null,
+      "test_files": ["test/mul.test.js", "test/clamp.test.js"], "new_tests": ["test/mul.test.js", "test/clamp.test.js"],
+      "ac_map": {"AC-1": ["test/mul.test.js::mul"], "AC-2": ["test/clamp.test.js::clamp"]}, "findings": []
+    },
+    "files": {
+      "test/mul.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { mul } from \"../src/calc.js\";\n\ntest(\"mul\", () => {\n  assert.equal(mul(3, 4), 12);\n});\n",
+      "test/clamp.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { clamp } from \"../src/util.js\";\n\ntest(\"clamp\", () => {\n  assert.equal(clamp(5, 0, 10), 5);\n  assert.equal(clamp(-5, 0, 10), 0);\n  assert.equal(clamp(15, 0, 10), 10);\n});\n"
+    },
+    "redgreen": {"rows": [
+      {"test": "test/mul.test.js", "kind": "compile", "evidence": "SyntaxError: The requested module does not provide an export named 'mul'"},
+      {"test": "test/clamp.test.js", "kind": "compile", "evidence": "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '../src/util.js'"}
+    ]}
+  }
+}

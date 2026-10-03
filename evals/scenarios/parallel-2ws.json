@@ -1,0 +1,16 @@
+{
+  "_expect": "COMPLETE",
+  "_note": "size M (not S) so lite.auto does not collapse this into a single-workstream lite run (that would merge both workstreams and skip CONFLICT/RISK entirely). Two independent workstreams (no depends_on) -> IMPLEMENT and TEST each dispatch_many with 2 entries (parallel wave). fake_agent.py's happy() path is workstream-aware: ws=calc writes src/calc.js/mul, ws=util writes src/util.js/clamp, so no IMPLEMENT/TEST overrides are needed. Dispatches: ARCH, IMPL-calc+IMPL-util (dispatch_many=2), TEST-calc+TEST-util (dispatch_many=2), REVIEW = 6.",
+  "ARCHITECT-i1": {
+    "out": {
+      "phase": "ARCHITECT", "size": "M", "design": "design.md", "assumptions": [],
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}, {"id": "AC-2", "text": "clamp(x,lo,hi) clamps x into [lo,hi]"}],
+      "workstreams": [
+        {"name": "calc", "owned": ["src/calc.js"], "depends_on": [], "ac": ["AC-1"]},
+        {"name": "util", "owned": ["src/util.js"], "depends_on": [], "ac": ["AC-2"]}
+      ],
+      "test_owned": {"calc": ["test/mul.test.js"], "util": ["test/clamp.test.js"]}
+    },
+    "artifacts": {"design.md": "# Design\n\nAC-1: mul(a,b) returns a*b (workstream calc).\nAC-2: clamp(x,lo,hi) (workstream util).\n\nFiles: src/calc.js, src/util.js, test/mul.test.js, test/clamp.test.js\n"}
+  }
+}

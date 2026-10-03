@@ -1,0 +1,14 @@
+{
+  "_expect": "BLOCKED",
+  "_expect_cause": "convergence",
+  "_note": "Same blocker R-1 (route implementer, verify manual) every REVIEW, never fixed. Traced hs/machine.py converge() by hand against spec §8.3: i1 FAIL (1st occurrence) -> full round implementer, iteration 2. i2 FAIL (2nd occurrence, resolved=0) -> forced architecter (spec 'seen a 2nd time -> route ปกติ' only fires on EXACTLY 2 seen with no other condition; here resolved=0 on the very next round also satisfies the zero-progress forced-architecter branch) -> iteration 3, arch_iterations=[3]. i3 FAIL (3rd occurrence): spec also says 'seen again after an iteration where route=architecter -> BLOCKED', but the code's check is `any(s[0] <= a < iteration for a in arch_iterations)` with iteration==3 and arch_iterations==[3] -> `3 < 3` is False, so that clause does NOT fire for the review that immediately follows the architect round in the SAME iteration (only a recurrence in a LATER iteration would trigger it). Instead the 'two consecutive rounds resolved zero blockers' clause (also spec §8.3) fires at i3, since resolved=0 twice in a row -> BLOCKED there. Both clauses are legitimate spec §8.3 convergence rules; this engine's ordering/strictness just makes the zero-progress rule win the race for a single always-repeating blocker, so the recurrence-after-architect clause is effectively unreachable for this exact pattern (would need a blocker that resolves at least once in between, then recurs after a LATER architect round, to observe it). Reported as a discrepancy worth a look, not fixed in the scenario. Dispatches: (ARCH,IMPL,TEST,REVIEW)x i1 + (IMPL,TEST,REVIEW) i2 + (ARCH,IMPL,TEST,REVIEW) i3 = 11.",
+  "REVIEW": {
+    "out": {
+      "phase": "REVIEW", "mode": "single", "report": "review.md",
+      "findings": [
+        {"id": "R-1", "severity": "blocker", "tag": "REQ", "file": "src/calc.js", "desc": "mul AC still not satisfied on inspection", "route": "implementer", "verify": "manual"}
+      ]
+    },
+    "artifacts": {"review.md": "# Review\n\nBlocker: mul AC still not satisfied.\n"}
+  }
+}
