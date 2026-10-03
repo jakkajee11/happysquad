@@ -62,7 +62,7 @@ benchmark = toy repo + 1 repo จริง, 5 งาน ตัวเลขทุ
 
 เงื่อนไขจาก product: ไม่มีข้อไหนกลับเข้า v1.0 เว้นแต่ตัดอย่างอื่นออกแลก
 
-- `hs frontier`, `/squad-fleet --frontier` / `--drain`, label `squad:passed` (ตัดเส้นทาง public-issue → `build_cmds` injection ไปด้วย)
+- ~~`hs frontier`, `/squad-fleet --frontier` / `--drain`, label `squad:passed`~~ (shipped 1.1.0, d450b46; ticket text reaches the architecter as the task only — `build_cmds` still go through provenance)
 - `hs brainstorm` (brainstorm ใช้ orchestration แบบ 0.16 ต่อ แค่ย้าย prompt)
 - ~~`hs wiki lint`~~ (shipped 1.1.0: deterministic pass in `hs/wiki.py`)
 - ~~context checkpoint (§8.9 เดิม)~~ (shipped 1.1.0: `checkpoint` action, agent-tool only, per session via `.happysquad/.session`)
