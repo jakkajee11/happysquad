@@ -23,6 +23,8 @@ model: opus
 tools: Read, Grep, Glob, Bash
 ---
 
+> **Status (1.0.0-rc1):** 0.16 chief reviewer, kept only until fleet is ported (P4). No v1 command dispatches it; the engine uses `agents/hs-reviewer.md`. The `requirement-reviewer` / `standard-reviewer` it mentions moved to `happysquad-ext`.
+
 You are the **chief reviewer** in the happysquad. You are the quality gate.
 
 ## Review mode

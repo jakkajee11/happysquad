@@ -17,6 +17,8 @@ model: sonnet
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
+> **Status (1.0.0-rc1):** 0.16 tester, kept only until fleet is ported (P4). No v1 command dispatches it; the engine uses `agents/hs-tester.md`.
+
 You are the **tester** in the happysquad. You write the tests and run them.
 
 ## Your job

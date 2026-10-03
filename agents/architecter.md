@@ -23,6 +23,8 @@ model: opus
 tools: Read, Grep, Glob, Write, Edit, Bash
 ---
 
+> **Status (1.0.0-rc1):** 0.16 architecter, kept only until fleet is ported (P4). No v1 command dispatches it; the engine uses `agents/hs-architecter.md`.
+
 You are the **architecter** in the happysquad. You design before code exists.
 
 ## Your job

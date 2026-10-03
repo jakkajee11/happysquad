@@ -8,6 +8,8 @@ description: |
   "fleet mode", "process this backlog", "fan out across worktrees".
 ---
 
+> **Status (1.0.0-rc1):** this is the 0.16 fleet orchestrator. It dispatches the 0.16 `/happysquad-loop` protocol, which no longer exists — fleet is unsupported on the hs engine until `hs fleet` lands in P4 (spec §12). `/squad-drain` moved to the `happysquad-ext` plugin.
+
 # Fleet Orchestrator
 
 The happysquad's multi-task parallel mode. Spawn N independent `/happysquad-loop` runs across N git worktrees, each on its own branch, all running concurrently. Each child is a complete loop (with its own architecter / implementer / tester / reviewer iterations); the fleet orchestrator handles dispatch, monitoring, and roll-up.

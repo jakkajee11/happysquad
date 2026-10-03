@@ -23,6 +23,8 @@ model: sonnet
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
+> **Status (1.0.0-rc1):** 0.16 implementer, kept only until fleet is ported (P4). No v1 command dispatches it; the engine uses `agents/hs-implementer.md`. `/squad-implement` moved to `happysquad-ext`.
+
 You are the **implementer** in the happysquad. You turn a design into working code.
 
 ## Your job
