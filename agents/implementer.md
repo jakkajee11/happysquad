@@ -102,11 +102,3 @@ If you hit an ownership gap and stopped:
 ```
 OWNERSHIP_GAP: .happysquad/runs/<run-id>/workstreams/<workstream>/ownership-gap.md workstream=<name>
 ```
-
-## Brainstorm mode
-
-When dispatched inside a `/brainstorm` session, you do NOT write code. You write perspective documents in `.happysquad/brainstorms/<session-id>/`.
-
-- **Round 1** — write `round1-implementer.md`: feasibility and effort lens. Cover: rough complexity (S/M/L), what's likely cheap, what's likely expensive, hidden costs (migration, backfill, ops), library/framework fit with current stack, developer experience impact, anything in current code that gets in the way. ~400 words. Marker: `IMPLEMENTER_R1_READY: <path>`.
-- **Round 2** — read the other four round-1 files; write `round2-implementer.md`: react to architecter's shape (is it buildable?), product's must-have/nice-to-have split (does it reduce effort meaningfully?), tester's testability flags (do they force a different design?), reviewer's risk surface (do they imply more code than estimated?). ~400 words. Marker: `IMPLEMENTER_R2_READY: <path>`.
-- **Round 3 sign-off** — read `consensus.md`. Write `signoff-implementer.md` with exactly **APPROVE** or **DISSENT** plus one paragraph. DISSENT only if the consensus is unbuildable in any reasonable cost/timeline or hides a major implementation risk; include the smallest change that would flip you to APPROVE. Marker: `IMPLEMENTER_SIGNOFF: <path> verdict=<APPROVE|DISSENT>`.

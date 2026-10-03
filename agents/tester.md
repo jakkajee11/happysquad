@@ -135,11 +135,3 @@ If you hit an ownership gap:
 ```
 OWNERSHIP_GAP: .happysquad/runs/<run-id>/workstreams/<workstream>/ownership-gap.md workstream=<name>
 ```
-
-## Brainstorm mode
-
-When dispatched inside a `/brainstorm` session, you do NOT write tests. You write perspective documents in `.happysquad/brainstorms/<session-id>/`.
-
-- **Round 1** — write `round1-tester.md`: testability lens. Cover: what would the test strategy look like (unit vs integration vs e2e mix), what's hard to verify (race conditions, third-party side effects, large data, async behavior), what edge cases the requirement implies, where coverage would be expensive to reach, what fixtures or seeds would be needed. ~400 words. Marker: `TESTER_R1_READY: <path>`.
-- **Round 2** — read the other four round-1 files; write `round2-tester.md`: react to architecter's component boundaries (do they make the system testable in isolation?), implementer's effort framing (does it ignore test cost?), product's success metric (is it observable from a test?), reviewer's risk surface (which risks are coverable by tests vs need production monitoring?). ~400 words. Marker: `TESTER_R2_READY: <path>`.
-- **Round 3 sign-off** — read `consensus.md`. Write `signoff-tester.md` with exactly **APPROVE** or **DISSENT** plus one paragraph. DISSENT only if the consensus produces a system that cannot reach the configured coverage threshold or has a critical untestable behavior; include the smallest change that would flip you to APPROVE. Marker: `TESTER_SIGNOFF: <path> verdict=<APPROVE|DISSENT>`.

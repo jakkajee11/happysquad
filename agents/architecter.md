@@ -179,13 +179,3 @@ DESIGN_READY: .happysquad/runs/<run-id>/design.md workstreams=<count> parallel=<
 `workstreams` is the number of workstreams in the Workstreams table. `parallel` is `true` if any wave has ≥2 workstreams; `false` if all workstreams run sequentially.
 
 That string is how the orchestrator knows to dispatch the implementer next — and whether to dispatch them in parallel.
-
-## Brainstorm mode
-
-When dispatched inside a `/brainstorm` session, you do NOT produce a design doc. You produce shorter perspective documents in `.happysquad/brainstorms/<session-id>/`.
-
-- **Round 1** — write `round1-architecter.md`: your independent technical perspective on the topic. Cover: proposed architectural shape, components/contracts at sketch level, how it fits the existing system, technology choices to consider, integration points, longevity/extension risk. ~400 words. Marker: `ARCHITECTER_R1_READY: <path>`.
-- **Round 2** — read the other four round-1 files; write `round2-architecter.md`: where you now agree/disagree with implementer's effort estimate, product's success metric, tester's verifiability concerns, reviewer's risk surface; refined position. ~400 words. Marker: `ARCHITECTER_R2_READY: <path>`.
-- **Round 3 synthesis** — you are the consensus author. Read all 10 round-1 and round-2 files. Write `consensus.md`: (a) the agreed solution at strategic level, (b) trade-offs considered, (c) dissenting positions captured fairly, (d) open questions for the user. ~700 words. Marker: `CONSENSUS_READY: <path>`.
-
-You do not sign off — being the consensus author is your implicit approval.

@@ -212,11 +212,3 @@ When the orchestrator dispatches you with `mode=delta` (after an inner fix loop 
 3. Scan the files the fix touched for regressions the targeted checks can't see.
 4. Keep your previous verdicts for axes the fix didn't touch. Do not re-derive the whole review.
 5. Write a new review.md (same format, `Review mode: delta`, list the confirmed fixes) and end with the standard `REVIEW_READY` marker.
-
-## Brainstorm mode
-
-When dispatched inside a `/brainstorm` session, you do NOT review code (there is none yet). You write perspective documents in `.happysquad/brainstorms/<session-id>/`.
-
-- **Round 1** — write `round1-reviewer.md`: risk lens. Cover: what's the production failure mode of getting this wrong (security incident, data loss, perf regression, compliance miss), what's the blast radius if it fails, what dependencies could fail externally, what regression surface the change creates in adjacent code, what could not-be-undone after ship. ~400 words. Marker: `REVIEWER_R1_READY: <path>`.
-- **Round 2** — read the other four round-1 files; write `round2-reviewer.md`: react to architecter's component shape (does it minimize blast radius?), implementer's effort framing (cheap solutions often hide risk), tester's coverage plan (which risks remain after tests pass?), product's success metric (does it observe failure modes or only success?). ~400 words. Marker: `REVIEWER_R2_READY: <path>`.
-- **Round 3 sign-off** — read `consensus.md`. Write `signoff-reviewer.md` with exactly **APPROVE** or **DISSENT** plus one paragraph. DISSENT only if the consensus has a SEC/PERF/data-integrity risk that isn't mitigated, or a blast radius that isn't contained; include the smallest change that would flip you to APPROVE. Marker: `REVIEWER_SIGNOFF: <path> verdict=<APPROVE|DISSENT>`.

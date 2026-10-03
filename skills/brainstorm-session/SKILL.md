@@ -38,6 +38,29 @@ Each agent in the brainstorm has a fixed perspective. Do not let them drift out 
 | tester      | How do we know it works? What's hard to verify?                  | Unverifiable success       |
 | reviewer    | What goes wrong in production? Where's the risk surface?         | Shipping foot-guns         |
 
+## Prompt files
+
+Each agent's round instructions live in `${CLAUDE_PLUGIN_ROOT}/prompts/brainstorm/`, not in the agent's own definition. When dispatching an agent for a round, pass it the matching file path and the instruction to read and follow it exactly.
+
+| Round          | Agent       | File                           |
+|----------------|-------------|---------------------------------|
+| 1              | product     | `prompts/brainstorm/r1-product.md`     |
+| 1              | architecter | `prompts/brainstorm/r1-architecter.md` |
+| 1              | implementer | `prompts/brainstorm/r1-implementer.md` |
+| 1              | tester      | `prompts/brainstorm/r1-tester.md`      |
+| 1              | reviewer    | `prompts/brainstorm/r1-reviewer.md`    |
+| 2              | product     | `prompts/brainstorm/r2-product.md`     |
+| 2              | architecter | `prompts/brainstorm/r2-architecter.md` |
+| 2              | implementer | `prompts/brainstorm/r2-implementer.md` |
+| 2              | tester      | `prompts/brainstorm/r2-tester.md`      |
+| 2              | reviewer    | `prompts/brainstorm/r2-reviewer.md`    |
+| 3 (synthesis)  | architecter | `prompts/brainstorm/consensus.md`      |
+| 3 (sign-off)   | product     | `prompts/brainstorm/signoff-product.md`     |
+| 3 (sign-off)   | implementer | `prompts/brainstorm/signoff-implementer.md` |
+| 3 (sign-off)   | tester      | `prompts/brainstorm/signoff-tester.md`      |
+| 3 (sign-off)   | reviewer    | `prompts/brainstorm/signoff-reviewer.md`    |
+| standalone     | product     | `prompts/brainstorm/product-critique.md`    |
+
 ## File layout the session produces
 
 ```
@@ -99,7 +122,7 @@ Every "wait for markers" below follows squad-loop §2 step 3 (`skills/squad-loop
 Dispatch all five agents **in parallel** using a single message with five Agent tool calls. Each gets:
 - the topic.md path
 - the session-id
-- the instruction "round 1 — write your independent perspective only, do not read other agents' work"
+- the path to its round-1 file in `${CLAUDE_PLUGIN_ROOT}/prompts/brainstorm/` (see "Prompt files" above) and the instruction to read and follow it exactly
 
 Each agent writes `round1-<agent>.md` and ends with their R1 completion marker.
 
@@ -109,7 +132,7 @@ Wait for all five markers before moving on. Update session.json.
 
 Dispatch all five agents **in parallel** again. Each gets:
 - all five round-1 file paths
-- the instruction "round 2 — read the other four round-1 notes; respond with where you agree, where you disagree, what new questions arise, what changed in your position"
+- the path to its round-2 file in `${CLAUDE_PLUGIN_ROOT}/prompts/brainstorm/` and the instruction to read and follow it exactly
 
 Each agent writes `round2-<agent>.md`. Wait for all markers.
 
@@ -117,9 +140,9 @@ Each agent writes `round2-<agent>.md`. Wait for all markers.
 
 Round 3 is sequential because the consensus must exist before sign-off:
 
-1. Dispatch **architecter** alone with the instruction "round 3 synthesis — read all 10 round-1 and round-2 files; write `consensus.md` with: (a) the agreed solution at a strategic level, (b) trade-offs the squad considered, (c) dissenting positions captured fairly, (d) open questions for the user". Architecter ends with `CONSENSUS_READY: <path>`.
+1. Dispatch **architecter** alone with the path to `${CLAUDE_PLUGIN_ROOT}/prompts/brainstorm/consensus.md` and the instruction to read and follow it exactly. Architecter ends with `CONSENSUS_READY: <path>`.
 
-2. Dispatch the other four agents (**product, implementer, tester, reviewer**) **in parallel** with the consensus path and the instruction "round 3 sign-off — read consensus.md, write `signoff-<agent>.md` with exactly APPROVE or DISSENT plus one paragraph".
+2. Dispatch the other four agents (**product, implementer, tester, reviewer**) **in parallel** with the consensus path plus each one's `${CLAUDE_PLUGIN_ROOT}/prompts/brainstorm/signoff-<agent>.md` path and the instruction to read and follow it exactly.
 
 3. Aggregate the four signoffs plus the architecter's implicit approval (as consensus author) into `signoffs.md`:
 
@@ -201,4 +224,4 @@ If `session.json` exists and `status = in_progress`:
 
 ## Standalone product-critique mode
 
-`/brainstorm --quick` skips to a single product-agent critique without the full 3-round session. Useful when the question is purely "is this requirement clear enough to start" rather than "what's the best solution". Product agent writes a critique and the orchestrator reports back; no other agents are dispatched.
+`/brainstorm --quick` skips to a single product-agent critique without the full 3-round session. Useful when the question is purely "is this requirement clear enough to start" rather than "what's the best solution". Dispatch product with the topic path and `${CLAUDE_PLUGIN_ROOT}/prompts/brainstorm/product-critique.md`; it writes a critique and the orchestrator reports back; no other agents are dispatched.
