@@ -64,7 +64,7 @@ benchmark = toy repo + 1 repo จริง, 5 งาน ตัวเลขทุ
 
 - `hs frontier`, `/squad-fleet --frontier` / `--drain`, label `squad:passed` (ตัดเส้นทาง public-issue → `build_cmds` injection ไปด้วย)
 - `hs brainstorm` (brainstorm ใช้ orchestration แบบ 0.16 ต่อ แค่ย้าย prompt)
-- `hs wiki lint`
+- ~~`hs wiki lint`~~ (shipped 1.1.0: deterministic pass in `hs/wiki.py`)
 - context checkpoint (§8.9 เดิม)
 - `--json` / `--brief` ทั่วไป (เหลือ `hs status --brief`)
 - `references/skill-map.json` (stack-detector ใช้ mapping ในตัวไปก่อน)

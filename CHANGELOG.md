@@ -5,6 +5,7 @@
 ### Added
 - `/squad-review` is back: `hs run review-only [--base <ref>] [--task …] [--driver headless]` reviews the diff vs the merge-base with main (or `--base`) with the full review stage — test gate and coverage over the diff, risk-routed specialists, chief reviewer — without running the architect/implementer/tester. A FAIL ends the run with `verdict: FAIL` and `feedback.md`; it never routes.
 
+- `hs wiki lint [--dry-run]`: the deterministic half of the wiki lint (index consistency, broken internal links fixed by unique basename, raw references, See Also pruning, log entry) in python; `/wiki-lint` runs it first and leaves only the judgement pass to the LLM.
 - `escalation.model` (spec §8.6): when convergence would first take a repeated blocker away from the agent that failed it (repeat / zero-progress → architecter), spend one borrowed round on that model for the implementer/tester instead; once per run, then convergence resumes. Default off.
 
 ### Changed
