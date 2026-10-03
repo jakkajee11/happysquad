@@ -172,12 +172,15 @@ class HeadlessFakeDriver(unittest.TestCase):
         subprocess.run(["git", "worktree", "prune"], cwd=self.w, capture_output=True)
         shutil.rmtree(self.w, ignore_errors=True)
 
-    def test_role_prompts_not_016_bodies(self):
+    def test_system_prompts_are_v1_bodies(self):
+        # the headless system prompt is agents/hs-<agent>.md (v1), never a 0.16 body with marker lines
         for a in ("architecter", "implementer", "tester", "reviewer", "specialist"):
+            path, is_v1 = drivers.agent_file(a)
+            self.assertTrue(is_v1, "%s should resolve to agents/hs-%s.md" % (a, a))
             p = drivers.agents_json(a)[a]["prompt"]
-            self.assertNotIn("DESIGN_READY", p)
-            self.assertNotIn("Brainstorm mode", p)
-            self.assertLess(len(p), 600)
+            for bad in ("DESIGN_READY", "IMPLEMENTATION_READY", "TESTS_READY", "REVIEW_READY", "Brainstorm mode", ".happysquad/"):
+                self.assertNotIn(bad, p, "%s prompt leaks %r" % (a, bad))
+            self.assertLess(len(p.split()), 900, "%s prompt over the spec word budget" % a)
         self.assertIn("Write", drivers.agents_json("reviewer")["reviewer"]["tools"])
 
     def test_isolated_worktree_run_completes_and_main_tree_untouched(self):
