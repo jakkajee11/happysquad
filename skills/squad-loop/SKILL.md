@@ -33,6 +33,10 @@ HS="${CLAUDE_PLUGIN_ROOT}/bin/hs"
      suggested_commit (or blocked_md + cause). If `wiki_offer` is true and `knowledge/wiki/index.md`
      exists, ask once: "Ingest this run into the wiki?" — yes → `/wiki-ingest --latest-run`; never
      auto-ingest. Stop.
+   - `checkpoint` → your context is the limiting resource now, not the engine's. Print `message` and
+     the `handoff` path, tell the user to open a fresh session and run `/squad-resume`, and stop.
+     Do not dispatch anything further in this session. (Fires at most once per session, only
+     between phases, never for headless runs.)
    - `error` → report the message. Stop.
 3. **Loop** back to step 2 with the new JSON line.
 

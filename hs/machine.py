@@ -425,6 +425,50 @@ def _public(spec):
     return {k: v for k, v in spec.items() if k != "phase_dir_abs"}
 
 
+def _session_id(root):
+    """The Claude session the SessionStart hook recorded (started_at), or None outside a hooked session."""
+    sess = S.read_json(os.path.join(S.hs_dir(root), ".session")) or {}
+    return sess.get("started_at")
+
+
+def _count_session_dispatch(root, st):
+    """Track dispatches per orchestrator session so the agent-tool driver can be told to hand off."""
+    sid = _session_id(root)
+    if not sid:
+        return
+    sd = st.setdefault("session_dispatches", {})
+    sd[sid] = sd.get(sid, 0) + 1
+
+
+def _checkpoint_due(root, st, cfg):
+    """Spec §8.9: agent-tool driver only; iteration ≥ checkpoint.iterations or ≥ checkpoint.dispatches in this session."""
+    if st.get("driver") != "agent-tool" or st.get("checkpointed_session") == _session_id(root):
+        return False
+    cp = cfg.get("checkpoint") or {}
+    if not cp.get("enabled", True):
+        return False
+    sid = _session_id(root)
+    if not sid:
+        return False
+    n = (st.get("session_dispatches") or {}).get(sid, 0)
+    return st["iteration"] >= cp.get("iterations", 3) or n >= cp.get("dispatches", 12)
+
+
+def _write_handoff(root, rdir, st):
+    rel = lambda p: os.path.relpath(p, root)
+    lines = ["# HANDOFF — run %s" % st["run_id"], "",
+             "State: **%s** · iteration %d/%d · mode %s · lite %s" % (st["state"], st["iteration"], st["cap"], st.get("mode"), st.get("lite")),
+             "Task: %s" % st["task"].splitlines()[0][:120], ""]
+    if st.get("pending"):
+        lines.append("Pending agents: " + ", ".join("%s%s" % (p["phase"], ("/" + p["ws"]) if p.get("ws") else "") for p in st["pending"]))
+    if st.get("review_phase_dirs"):
+        lines.append("Last review: %s" % os.path.join(st["review_phase_dirs"][-1], "review.md"))
+    if os.path.isfile(os.path.join(rdir, "feedback.md")):
+        lines.append("Open feedback: %s" % rel(os.path.join(rdir, "feedback.md")))
+    lines += ["", "Next action: open a fresh session in this repo and run `/squad-resume`. The engine continues from disk; nothing is lost."]
+    S.atomic_write(os.path.join(rdir, "HANDOFF.md"), "\n".join(lines) + "\n")
+
+
 def next_action(root, run_id, cfg):
     rdir = S.run_dir(root, run_id)
     st = S.load_state(rdir)
@@ -432,6 +476,18 @@ def next_action(root, run_id, cfg):
         return {"action": "error", "message": "no such run %s" % run_id}
     if st["state"] in TERMINAL:
         return _done(root, rdir, st)
+    # context checkpoint (spec §8.9): only between phases — never while agents or gates are in flight
+    if not st.get("pending") and not st.get("gates") and _checkpoint_due(root, st, cfg):
+        with S.locked(rdir):
+            st = S.load_state(rdir)
+            if st.get("checkpointed_session") != _session_id(root):
+                st["checkpointed_session"] = _session_id(root)
+                _write_handoff(root, rdir, st)
+                S.commit(rdir, st, "checkpoint", phase=st["state"], iteration=st["iteration"],
+                         data={"session": _session_id(root), "dispatches": (st.get("session_dispatches") or {}).get(_session_id(root), 0)})
+                return {"action": "checkpoint", "handoff": os.path.relpath(os.path.join(rdir, "HANDOFF.md"), root),
+                        "state": st["state"], "iteration": st["iteration"],
+                        "message": "Context is approaching the smart zone; state is on disk. Continue in a fresh session with /squad-resume."}
     g = st.get("gates", {})
     if g:
         files = [os.path.relpath(os.path.join(rdir, x["file"]), root) for x in g.values()]
@@ -519,6 +575,7 @@ def dispatch(root, run_id, cfg):
             S.append_event(rdir, "dispatch", phase=sp["phase"], iteration=st["iteration"],
                            data={"agent": sp["agent"], "model": sp["model"], "phase_dir": entry["phase_dir"],
                                  "workstream": sp["ws"], "axis": sp["axis"]})
+            _count_session_dispatch(root, st)
             rendered.append({"phase": sp["phase"], "iteration": st["iteration"], "agent": sp["agent"], "model": sp["model"],
                              "prompt_file": os.path.relpath(pf, root), "out_file": sp["out_file"],
                              "workstream": sp["ws"], "axis": sp["axis"], "cwd": None})

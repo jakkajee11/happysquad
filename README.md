@@ -106,6 +106,7 @@ All keys live in `hs/config.py` `DEFAULTS`; `.happysquad/config.json` overrides 
 | `models.*` | architecter/reviewer/specialist/product = opus, implementer/tester = sonnet | per-agent model override |
 | `lite.auto` / `lite.cap` | `true` / 3 | size-S designs auto-enter the lite path; its own iteration cap |
 | `escalation.model` | `null` | one borrowed fix round on this model for the implementer/tester the first time convergence would force an architecter round; once per run |
+| `checkpoint.enabled` / `.iterations` / `.dispatches` | `true` / 3 / 12 | agent-tool driver: hand off to a fresh session (`checkpoint` action + `HANDOFF.md`) once per session after this many iterations or dispatches; headless runs never checkpoint |
 | `build_cmd` / `test_cmd` / `coverage_report` | `null` | seeded by `hs init`; `test_cmd` is required to start a run |
 | `redgreen_cmd` | `null` | template with `{file}`; default `"<test_cmd> {file}"` |
 | `allowed_flags` | `--run`, `--filter`, `--grep`, `-t`, `-k`, `--testNamePattern`, `--coverage` | flags an agent-supplied command may add past a config-command prefix |

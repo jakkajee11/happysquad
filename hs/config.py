@@ -25,6 +25,7 @@ DEFAULTS = {
     },
     "lite": {"auto": True, "cap": 3},
     "escalation": {"model": None},  # spec §8.6: one fix round on this model when a blocker is seen a 3rd time
+    "checkpoint": {"enabled": True, "iterations": 3, "dispatches": 12},  # spec §8.9: agent-tool driver hand-off point
     "build_cmd": None,
     "test_cmd": None,
     "coverage_report": None,
@@ -51,7 +52,7 @@ DEFAULTS = {
 _RETIRED = ("interactive",)
 
 # keys whose value is a dict merged one level deep rather than replaced
-_NESTED = ("models", "lite", "escalation", "headless", "hooks", "wiki", "fleet")
+_NESTED = ("models", "lite", "escalation", "checkpoint", "headless", "hooks", "wiki", "fleet")
 
 _warned = False
 
