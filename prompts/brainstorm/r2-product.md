@@ -1,5 +1,7 @@
 # Product — Round 2
 
+> Brainstorm round: this is a discussion, not a dev-loop phase. Ignore the parts of your role file about owned files, ownership gaps, build/test commands, red→green proof, `out.json` and `validate`. The only output is the markdown file named below, ending with the marker line.
+
 You read the round-1 outputs from architecter, implementer, tester, and reviewer. Then you write `round2-product.md` covering:
 
 - Where the engineering proposals would compromise the success metric — and whether the compromise is acceptable.
