@@ -9,8 +9,11 @@
 ### Changed
 - `/brainstorm` dispatches the v1 `hs-*` agents for the four engineering roles (`product` unchanged).
 
+### Fixed
+- Brainstorm rounds dispatched to the `hs-*` agents could stall on the role files' dev-loop procedure (owned files, red→green, `out.json`/validate); every `prompts/brainstorm/*.md` now opens with a waiver.
+
 ### Removed
-- The four 0.16 dev-loop agent files (`agents/{architecter,implementer,tester,reviewer}.md`) and the 0.16 fleet orchestrator prose. The 0.16 chief reviewer is kept in `happysquad-ext` and at tag `v0.16.2` for the recall baseline.
+- The four 0.16 dev-loop agent files (`agents/{architecter,implementer,tester,reviewer}.md`), the two 0.16 specialist files (`security-reviewer.md`, `performance-reviewer.md`, replaced by `hs-specialist.md` + `references/axis-*.md`), and the 0.16 fleet orchestrator prose. All kept in `happysquad-ext`. The 0.16 chief reviewer is kept in `happysquad-ext` and at tag `v0.16.2` for the recall baseline.
 
 ### Still 1.1
 - `/squad-review` review-only, `ask`/non-interactive defaults (`interactive` is a no-op), `hs brainstorm`, `hs wiki lint`, tracker frontier/drain, context checkpoint, `escalation.model`.
