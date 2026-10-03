@@ -31,7 +31,8 @@ SCENARIOS = {
     "repeat-escalate": 11,
     "parallel-2ws": 6,
     "parallel-deps": 6,  # util depends_on calc: IMPLEMENT and TEST each come as two sequential single dispatches
-    "ownership-gap": 6,  # implementer stops on a gap -> architect re-run in-iteration -> fresh IMPLEMENT-i1-r1 consumed
+    "ownership-gap": 6,
+    "repeat-escalate-model": 10,  # escalation.model: i3 fix agents on the escalation model instead of a forced architecter round; still BLOCKED by cap  # implementer stops on a gap -> architect re-run in-iteration -> fresh IMPLEMENT-i1-r1 consumed
     "ownership-violation": 9,
     "risk-sec": 5,
     "risk-sec-blocks": 9,
@@ -41,6 +42,7 @@ SCENARIOS = {
 # extra environment for a scenario's run_fake.sh invocation (e.g. RUN_FLAGS=--lite)
 SCENARIO_ENV = {
     "lite-forced": {"RUN_FLAGS": "--lite"},
+    "repeat-escalate-model": {"RUN_CONFIG": '{"escalation":{"model":"opus-x"}}'},
 }
 
 

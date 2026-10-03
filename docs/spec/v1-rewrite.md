@@ -68,7 +68,7 @@ benchmark = toy repo + 1 repo จริง, 5 งาน ตัวเลขทุ
 - context checkpoint (§8.9 เดิม)
 - `--json` / `--brief` ทั่วไป (เหลือ `hs status --brief`)
 - `references/skill-map.json` (stack-detector ใช้ mapping ในตัวไปก่อน)
-- `escalation.model`
+- ~~`escalation.model`~~ (shipped 1.1.0: fires on the first forced-architecter, once per run, fix agents only)
 
 ## 3. โครงสร้างไฟล์
 
@@ -559,7 +559,7 @@ dispatch prompt ≤ 200 คำ: บทบาท, input paths, output (artifact +
 |---|---|
 | `/happysquad-loop <task> [--lite\|--full] [--no-parallel] [--driver X]` | §10 |
 | `/squad-architect <task>` | `hs run start` + ARCHITECT เท่านั้น แล้วหยุด |
-| `/squad-review [--base <ref>]` | run แบบ review-only: base_ref = merge-base → gate test → RISK → SPECIALISTS → REVIEW |
+| `/squad-review [--base <ref>] [--headless]` | **1.1.0:** `hs run review-only` — base_ref = merge-base (หรือ `--base`) → gate test + coverage บน diff → RISK → SPECIALISTS → REVIEW; FAIL จบด้วย verdict + feedback.md ไม่ route |
 | `/squad-status` | `hs status` |
 | `/squad-resume` | `hs resume` + §10 |
 | `/squad-fleet <file> [--max N]` | §12 (P4; ก่อนนั้นคือ 0.16) |
@@ -695,7 +695,7 @@ toy repo + `claude -p` headless driver 1 loop, `--max-budget-usd 3`, gate ที
 | # | คำถาม | block อะไร |
 |---|---|---|
 | Q3 | v1.0 ผูกกับวันหรือ scope อะไรยอมได้ | ขนาด P1a/P1b |
-| Q8 | §16.2 `ask`/non-interactive: engine ตอนนี้ไม่ ask เลย (ทุก prompt ที่ 0.16 เคยถามถูกย้ายไป skill หรือตัดออก) — คง `interactive` key ไว้เป็น no-op หรือลบจาก config ใน 1.0.0 | P3 docs |
+| ~~Q8~~ | **ปิด (1.1.0):** ลบ `interactive` จาก DEFAULTS, รับจาก config เก่าแบบเงียบ ๆ ไม่มีผล; `ask` action ไม่มีใน engine และ §16.2 เป็น non-goal | – |
 | Q4 | repo เป้าหมายใช้ coverage format และรูปแบบ repo แบบไหน (monorepo, Go, JVM) ใน `workspace:*` repo green ที่ ref ควรนับ `not-runnable` หรือยอมรับความเสี่ยง | parser scope, redgreen rule |
 | Q5 | มีคนอื่นใช้ plugin ไหม (migration note, Windows) glm/opencode offload ประหยัดจริงไหมวันนี้ | P3 docs |
 | Q6 | tag v1.0.0 ต้องรอ fleet (P4) หรือ ship หลัง P3 ได้ `/squad-drain` คงเวอร์ชัน 0.16 ถึง 1.1 หรือตัดโดยไม่มีตัวแทน | P3/P4 |

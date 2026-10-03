@@ -97,7 +97,7 @@ class Converge(unittest.TestCase):
         return b
 
     def test_fresh_blocker_tracked_no_resolve_no_repeat(self):
-        fs, forced, block, resolved, repeats = machine.converge({}, [self.blocker()], 1, "implementer", [], 0)
+        fs, forced, block, resolved, repeats, _third = machine.converge({}, [self.blocker()], 1, "implementer", [], 0)
         self.assertEqual(len(fs), 1)
         self.assertIsNone(forced)
         self.assertIsNone(block)
@@ -105,7 +105,7 @@ class Converge(unittest.TestCase):
 
     def test_same_blocker_twice_zero_progress_forces_then_blocks(self):
         fs1, *_ = machine.converge({}, [self.blocker()], 1, "implementer", [], 0)
-        _, forced, block, resolved, repeats = machine.converge(fs1, [self.blocker()], 2, "implementer", [], 0)
+        _, forced, block, resolved, repeats, _third = machine.converge(fs1, [self.blocker()], 2, "implementer", [], 0)
         self.assertEqual((resolved, repeats), (0, 1))
         self.assertEqual(forced, "architecter")
         self.assertIsNone(block)
@@ -137,13 +137,13 @@ class Converge(unittest.TestCase):
 
     def test_gate_blockers_ignored(self):
         gate_b = self.blocker(id="G-TESTS", source="gate")
-        fs, forced, block, resolved, repeats = machine.converge({}, [gate_b], 1, "implementer", [], 0)
+        fs, forced, block, resolved, repeats, _third = machine.converge({}, [gate_b], 1, "implementer", [], 0)
         self.assertEqual(fs, {})
         self.assertEqual((forced, block, resolved, repeats), (None, None, 0, 0))
 
     def test_disappeared_blocker_resolves(self):
         fs1, *_ = machine.converge({}, [self.blocker()], 1, "implementer", [], 0)
-        _, forced, block, resolved, _ = machine.converge(fs1, [], 2, "implementer", [], 0)
+        _, forced, block, resolved, _, _third = machine.converge(fs1, [], 2, "implementer", [], 0)
         self.assertEqual(resolved, 1)
         self.assertIsNone(forced)
         self.assertIsNone(block)

@@ -1,0 +1,26 @@
+{
+  "REVIEW": {
+    "out": {
+      "phase": "REVIEW",
+      "mode": "single",
+      "report": "review.md",
+      "findings": [
+        {
+          "id": "R-1",
+          "severity": "blocker",
+          "tag": "REQ",
+          "file": "src/calc.js",
+          "desc": "mul AC still not satisfied on inspection",
+          "route": "implementer",
+          "verify": "manual"
+        }
+      ]
+    },
+    "artifacts": {
+      "review.md": "# Review\n\nBlocker: mul AC still not satisfied.\n"
+    }
+  },
+  "_expect": "BLOCKED",
+  "_note": "repeat-escalate with escalation.model=opus-x (RUN_CONFIG). The same blocker is seen at i1 and i2; at the i2 review convergence would force architecter (zero progress). With escalation.model set the engine instead records an `escalate` event and dispatches the i3 implementer/tester on opus-x, then convergence resumes: the i3 review repeats the blocker \u2192 forced architecter at i4 \u2192 cap 3 exceeded \u2192 BLOCKED by convergence. 10 dispatches (cap 3: the i4 architecter round never starts).",
+  "_dispatches": 10
+}

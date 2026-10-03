@@ -24,6 +24,7 @@ DEFAULTS = {
         "product": "opus",
     },
     "lite": {"auto": True, "cap": 3},
+    "escalation": {"model": None},  # spec §8.6: one fix round on this model when a blocker is seen a 3rd time
     "build_cmd": None,
     "test_cmd": None,
     "coverage_report": None,
@@ -50,7 +51,7 @@ DEFAULTS = {
 _RETIRED = ("interactive",)
 
 # keys whose value is a dict merged one level deep rather than replaced
-_NESTED = ("models", "lite", "headless", "hooks", "wiki", "fleet")
+_NESTED = ("models", "lite", "escalation", "headless", "hooks", "wiki", "fleet")
 
 _warned = False
 

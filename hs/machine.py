@@ -78,6 +78,7 @@ def converge(findings_state, blockers, iteration, route, arch_iterations, zero_p
     prev_open = {k for k, v in findings_state.items() if v["seen"] and v["seen"][-1] == iteration - 1}
     resolved = len(prev_open - seen_now)
     repeats = [k for k in seen_now if len(fs[k]["seen"]) >= 2]
+    third = [k for k in seen_now if len(fs[k]["seen"]) >= 3]
     forced = None
     block = None
     for k in seen_now:
@@ -92,7 +93,7 @@ def converge(findings_state, blockers, iteration, route, arch_iterations, zero_p
             block = "two consecutive rounds resolved zero blockers"
         else:
             forced = forced or "architecter"
-    return fs, forced, block, resolved, len(repeats)
+    return fs, forced, block, resolved, len(repeats), third
 
 
 def _same_ref(a, b):
@@ -351,6 +352,15 @@ def _render_prompt(root, st, cfg, spec):
     return pf
 
 
+
+def _model_for(st, cfg, agent):
+    """The model for an agent dispatch; the escalated iteration's fix agents use escalation.model (spec §8.6)."""
+    esc = st.get("escalation")
+    if esc and esc.get("iteration") == st.get("iteration") and agent in ("implementer", "tester"):
+        return esc["model"]
+    return cfg["models"][agent]
+
+
 # --- what dispatches are needed right now (read-only) ------------------------
 
 def _needed(root, rdir, st, cfg):
@@ -366,7 +376,7 @@ def _needed(root, rdir, st, cfg):
             name = phase_dir_name("SPECIALIST", it, ws=axis)
         pd = os.path.join(rdir, name)
         return {"phase": phase_, "agent": agent, "ws": ws, "axis": axis, "schema_phase": schema_phase or phase_,
-                "model": cfg["models"][agent], "phase_dir_abs": pd,
+                "model": _model_for(st, cfg, agent), "phase_dir_abs": pd,
                 "out_file": os.path.relpath(os.path.join(pd, "out.json"), root)}
 
     if phase == "ARCHITECT":
@@ -436,7 +446,7 @@ def next_action(root, run_id, cfg):
         for p in pend:
             pf = os.path.join(rdir, "prompts", os.path.basename(p["phase_dir"]) + ".md")
             disp.append({"phase": p["phase"], "iteration": p["iteration"], "agent": p["agent"],
-                         "model": cfg["models"][p["agent"]], "prompt_file": os.path.relpath(pf, root),
+                         "model": _model_for(st, cfg, p["agent"]), "prompt_file": os.path.relpath(pf, root),
                          "out_file": p["out_file"], "workstream": p.get("ws"), "axis": p.get("axis"), "cwd": None})
         return {"action": "wait", "for": "agents", "files": [p["out_file"] for p in pend],
                 "since": min(p["dispatched_at"] for p in pend), "dispatches": disp}
@@ -729,7 +739,7 @@ def _validation_fail(root, rdir, st, cfg, p, errs):
     pd = os.path.join(root, "%s-r%d" % (base, (int(m.group(1)) if m else 0) + 1))
     os.makedirs(os.path.join(pd, "logs"), exist_ok=True)
     spec = {"phase": p["phase"], "agent": p["agent"], "ws": p.get("ws"), "axis": p.get("axis"),
-            "schema_phase": p["schema_phase"], "model": cfg["models"][p["agent"]], "phase_dir_abs": pd,
+            "schema_phase": p["schema_phase"], "model": _model_for(st, cfg, p["agent"]), "phase_dir_abs": pd,
             "out_file": os.path.relpath(os.path.join(pd, "out.json"), root)}
     pf = _render_prompt(root, st, cfg, spec)
     with open(pf, "a") as f:
@@ -741,7 +751,7 @@ def _validation_fail(root, rdir, st, cfg, p, errs):
              data={"agent": p["agent"], "retry_reason": errs, "phase_dir": os.path.relpath(pd, root)})
     # a retry is a fresh dispatch the driver must send now, not something to wait on
     return {"action": "dispatch", "phase": p["phase"], "iteration": st["iteration"], "agent": p["agent"],
-            "model": cfg["models"][p["agent"]], "prompt_file": os.path.relpath(pf, root), "out_file": spec["out_file"],
+            "model": _model_for(st, cfg, p["agent"]), "prompt_file": os.path.relpath(pf, root), "out_file": spec["out_file"],
             "workstream": p.get("ws"), "axis": p.get("axis"), "cwd": None, "retry_reason": "; ".join(errs)}
 
 
@@ -1031,7 +1041,7 @@ def _after_review(root, rdir, st, cfg, out, pd):
     # mechanical and self-clearing, so they neither count as repeats nor as "unresolved"
     before = st.get("findings", {})
     prev_had = any(v["seen"] and v["seen"][-1] == st["iteration"] - 1 for v in before.values())
-    fs, forced, block, resolved, repeats = converge(before, blockers, st["iteration"], route,
+    fs, forced, block, resolved, repeats, third = converge(before, blockers, st["iteration"], route,
                                                     st.get("arch_iterations", []), st.get("zero_progress", 0))
     st["findings"] = fs
     st["zero_progress"] = st["zero_progress"] + 1 if (resolved == 0 and prev_had) else 0
@@ -1040,6 +1050,18 @@ def _after_review(root, rdir, st, cfg, out, pd):
     if block:
         _write_feedback(rdir, st, blockers, majors, route)
         return _block(root, rdir, st, "convergence", block)
+    esc_model = (cfg.get("escalation") or {}).get("model")
+    if esc_model and forced == "architecter" and not block and not st.get("escalated") and route in ("implementer", "tester"):
+        # spec §8.6: the first time convergence would take the blocker away from the agent that failed it
+        # (repeat / zero-progress → architecter), spend one borrowed attempt on a stronger model for that
+        # same agent instead. Once. Convergence resumes normally on the next review.
+        repeated = [fs[k]["id"] for k in fs if len(fs[k]["seen"]) >= 2 and fs[k]["seen"][-1] == st["iteration"]]
+        st["escalated"] = True
+        st["escalation"] = {"model": esc_model, "iteration": st["iteration"] + 1, "findings": repeated}
+        S.append_event(rdir, "escalate", phase="REVIEW", iteration=st["iteration"],
+                       data={"model": esc_model, "findings": repeated, "route": route, "instead_of": forced})
+        forced = None
+        st["zero_progress"] = 0
     if forced:
         route = forced
     _write_feedback(rdir, st, blockers, majors, route)

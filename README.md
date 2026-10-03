@@ -32,6 +32,7 @@ Everything else (cap, models, coverage threshold, …) falls back to the default
 - `/happysquad-loop <task> --headless` has `hs` drive `claude -p` itself, in an isolated git worktree on branch `hs/<run-id>`. No orchestrator LLM turns are spent. On completion the run reports `worktree`, `branch`, and a `suggested_merge` (`git merge --no-ff hs/<run-id>`) — nothing is auto-merged.
 - `/squad-status` → `hs status`: current run, state, iteration/cap, workstreams, pending dispatches.
 - `/squad-resume` → `hs resume`: picks up a run that stopped mid-phase (crash, closed session, killed agent) from whatever's already on disk.
+- `/squad-review [--base <ref>] [--headless]` → `hs run review-only`: reviews the diff vs the merge-base with main (or `--base`) with the full review stage — test gate and coverage over the diff, risk-routed specialists, chief reviewer — and no architect/implementer/tester. A FAIL ends the run with `verdict: FAIL` and `feedback.md`; it never routes or edits.
 
 ## How a run works
 
@@ -104,6 +105,7 @@ All keys live in `hs/config.py` `DEFAULTS`; `.happysquad/config.json` overrides 
 | `max_parallel` | 4 | concurrent workstream dispatches / headless subprocesses |
 | `models.*` | architecter/reviewer/specialist/product = opus, implementer/tester = sonnet | per-agent model override |
 | `lite.auto` / `lite.cap` | `true` / 3 | size-S designs auto-enter the lite path; its own iteration cap |
+| `escalation.model` | `null` | one borrowed fix round on this model for the implementer/tester the first time convergence would force an architecter round; once per run |
 | `build_cmd` / `test_cmd` / `coverage_report` | `null` | seeded by `hs init`; `test_cmd` is required to start a run |
 | `redgreen_cmd` | `null` | template with `{file}`; default `"<test_cmd> {file}"` |
 | `allowed_flags` | `--run`, `--filter`, `--grep`, `-t`, `-k`, `--testNamePattern`, `--coverage` | flags an agent-supplied command may add past a config-command prefix |

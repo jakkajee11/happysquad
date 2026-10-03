@@ -37,8 +37,15 @@ git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm ini
 export HS_TOY_FAST=1
 "$HS" init >/dev/null
 cat > .happysquad/config.json <<EOF
-{"build_cmd":"npm run build","test_cmd":"npm test","coverage_report":"coverage/lcov.info","redgreen_cmd":"npm test -- {file}","interactive":false,"cap":3}
+{"build_cmd":"npm run build","test_cmd":"npm test","coverage_report":"coverage/lcov.info","redgreen_cmd":"npm test -- {file}","cap":3}
 EOF
+# RUN_CONFIG: a JSON object merged over the config above (e.g. '{"escalation":{"model":"opus-x"}}')
+if [ -n "${RUN_CONFIG:-}" ]; then
+  python3 - "$RUN_CONFIG" <<'PY2'
+import json, sys
+p = ".happysquad/config.json"; c = json.load(open(p)); c.update(json.loads(sys.argv[1])); json.dump(c, open(p, "w"))
+PY2
+fi
 
 # --driver agent-tool (not "fake"): P1b repurposed --driver fake/headless to mean "hs drives a
 # real/fake `claude -p` itself" (hs/drivers.py run_headless), which blocks until done and never
