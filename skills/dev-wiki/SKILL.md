@@ -193,21 +193,8 @@ Two categories.
 
 ### Deterministic checks (auto-fix)
 
-**Index consistency** — compare `index.md` against actual files in `wiki/`:
-- File exists but missing from index → add entry with `(no summary)` placeholder.
-- Index entry points to nonexistent file → mark as `[MISSING]`. Don't delete.
-
-**Internal links** — for every markdown link in `wiki/` article files (body + Sources frontmatter), excluding Raw field links and excluding `index.md`/`log.md`:
-- Target missing → search `wiki/` for a file with the same name elsewhere.
-  - Exactly one match → fix the path.
-  - Zero or multiple → report.
-
-**Raw references** — every Raw-field link must resolve to a file under `raw/`:
-- Target missing → same search-and-fix as internal links.
-
-**See Also** — within each topic:
-- Add obviously missing cross-references between related articles.
-- Remove links to deleted files.
+Implemented by `hs wiki lint` (index consistency, internal links, raw: references, See Also
+pruning) — run it before the heuristic pass below. It writes its own `knowledge/wiki/log.md` entry.
 
 ### Heuristic checks (report only)
 

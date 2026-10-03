@@ -271,6 +271,17 @@ def cmd_fleet(args):
         _out(F.cleanup(root, fid, cfg, keep_failed=not args.all))
 
 
+def cmd_wiki(args):
+    from . import wiki
+    root = _root(args)
+    if args.sub == "lint":
+        res = wiki.lint(root, dry_run=args.dry_run)
+        _out(res)
+        sys.exit(0 if res.get("ok") else 1)
+    _out({"ok": False, "error": "unknown wiki subcommand"})
+    sys.exit(2)
+
+
 def cmd_validate(args):
     root = _root(args)
     out = S.read_json(os.path.join(root, args.out_file))
@@ -498,6 +509,13 @@ def main(argv=None):
     fc.add_argument("--fleet")
     fc.add_argument("--all", action="store_true", help="remove BLOCKED/stalled worktrees too")
     fl.set_defaults(fn=cmd_fleet)
+
+    wk = sub.add_parser("wiki")
+    wks = wk.add_subparsers(dest="sub", required=True)
+    wl = wks.add_parser("lint")
+    wl.add_argument("--dry-run", action="store_true")
+    wl.add_argument("--json", action="store_true", help="no-op — output is already a single JSON line")
+    wk.set_defaults(fn=cmd_wiki)
 
     v = sub.add_parser("validate")
     v.add_argument("out_file")
