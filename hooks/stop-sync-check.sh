@@ -7,6 +7,9 @@
 # happysquad project. Never fails the session on error.
 set -u
 
+# hs headless children (HS_CHILD=1) are agents, not sessions: never nag them to journal.
+[ "${HS_CHILD:-}" = "1" ] && exit 0
+
 HAPPYSQUAD_DIR=".happysquad"
 [ -d "$HAPPYSQUAD_DIR" ] || exit 0
 command -v git >/dev/null 2>&1 || exit 0

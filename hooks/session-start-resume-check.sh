@@ -15,6 +15,9 @@
 # Prints NOTHING outside a happysquad project (zero context cost). Never fails the session.
 set -u
 
+# hs headless children (HS_CHILD=1) get no orientation block: it costs context and can mislead them.
+[ "${HS_CHILD:-}" = "1" ] && exit 0
+
 HAPPYSQUAD_DIR=".happysquad"
 
 # No happysquad state in this project → nothing to do (keeps non-happysquad projects silent).
