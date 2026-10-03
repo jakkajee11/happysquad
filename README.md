@@ -115,7 +115,7 @@ All keys live in `hs/config.py` `DEFAULTS`; `.happysquad/config.json` overrides 
 | `headless.poll_interval` | 3 | seconds between driver polls |
 | `hooks.stop_progress_nudge` | `false` | Stop-hook progress nudge, opt-in |
 | `wiki.offer` | `true` | offer a wiki ingest on COMPLETE |
-| `fleet.base_branch` | `null` | base branch for `hs fleet start` (not shipped yet — see below) |
+| `fleet.base_branch` | `null` | reserved; `hs fleet start` branches children from the current HEAD |
 
 ## Layout
 
@@ -141,7 +141,7 @@ All keys live in `hs/config.py` `DEFAULTS`; `.happysquad/config.json` overrides 
 Unchanged from 0.16 except where noted:
 
 - **Brainstorm** (`/brainstorm`) — same 3-round orchestration (product/architecter/implementer/tester/reviewer diverge → cross-review → converge). Only the per-round prompt text moved, to `prompts/brainstorm/*.md`. An engine-driven `hs brainstorm` is planned for 1.1.
-- **Fleet** (`/squad-fleet`) — still the 0.16 implementation: one git worktree per task, run concurrently. It drives the 0.16 loop, not `hs` — **unsupported on the new engine** until `hs fleet` (P4) ships in 1.1.
+- **Fleet** (`/squad-fleet`, `hs fleet start|advance|wait|status|cleanup`) — N independent tasks as headless runs, one git worktree each under `<repo>-hs-wt/fleet-<id>/<slug>` on branch `fleet/<id>/<slug>`, scheduled up to `max_parallel`. A child whose driver dies is re-dispatched once, then marked stalled; the aggregate report lists merge commands and nothing is merged for you. Tracker frontier / drain modes are 1.1.
 - **Stack detector** (`/squad-detect`) — same scan; now also feeds `hs init`'s `build_cmd`/`test_cmd`/`coverage_report` seeding.
 - **Wiki** (`/wiki-ingest`, `/wiki-ask`, `/wiki-lint`) — unchanged.
 
@@ -171,7 +171,7 @@ Headline numbers (`evals/bench/tasks.md`, P2 dogfood gate, 5 tasks on this repo'
 - **Hand-off**: completion markers (`DESIGN_READY: …`, etc.) are gone — every agent writes `out.json` and runs `hs validate` before finishing.
 - **Coverage**: gated on lines the diff *added* (`coverage_rule: "delta"`) by default, not whole-file percent — 0.16 never actually enforced per-file coverage on touched files, so this is a real behavior change, not a rename.
 - **Removed, moved to the `happysquad-ext` plugin** (not yet published): `/squad-assemble` + team assembly, `/ask-kilo`, `/squad-implement`, `/squad-test`, `/squad-drain`, the `requirement-reviewer`/`standard-reviewer` specialists, external executors (glm/opencode) + the tmux pane rule, worktree-per-workstream fallback, Fable-specific escalation.
-- **Not removed, but frozen**: `/squad-fleet` stays on the 0.16 loop until `hs fleet` ships (1.1).
+- **Fleet** is on the engine as of 1.0.0; the 0.16 fleet state (`.happysquad/fleets/*/fleet.json` from 0.16, `.happysquad/worktrees/`) is not read.
 
 ## License
 
