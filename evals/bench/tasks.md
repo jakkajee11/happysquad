@@ -58,11 +58,27 @@ Baseline notes (0.16.2, sonnet on every agent, cap 3, threshold 50, all five lau
 - **Coverage figures are not comparable across engines:** the oracle's whole-package percent fell from ~21–26% to ~13–16% because the engine grew from 1,408 to ~2,370 executable lines between the baseline and this run (same hit count). The v1.0 gate uses the delta rule (added lines only), which every task passed.
 - **Two engine bugs found by this bench and fixed before the runs counted:** snapshot failing when the repo's own `.gitignore` ignores `.happysquad/` (586a17a); an in-iteration architect re-run reusing the phase dir (fb056b9).
 
-**Seeded-bug recall (evals/bench/recall.sh, sonnet, same planted diff):** 0.16.2 reviewer 3/3 caught (+1 extra SEC cross-reference), $0.35, 33 turns. hs reviewer: see row below when run.
+**Seeded-bug recall (evals/bench/recall.sh, sonnet, same planted diff):** both reviewers catch all three at 33 turns each. 0.16.2 adds a SEC cross-reference of B-C; hs adds a TEST major (no test covers the agent-test_cmds path) and an STD minor (dead `tmp_dir` call) with machine-checkable `verify` commands. Recall ≥ baseline.
 
 | reviewer | B-A | B-B | B-C | recall | cost |
 |---|---|---|---|---|---|
 | 0.16.2 `agents/reviewer.md` | caught | caught | caught | 3/3 | $0.35 |
-| hs `agents/hs-reviewer.md` | pending | pending | pending | pending | pending |
+| hs `agents/hs-reviewer.md` | caught | caught | caught | 3/3 | $0.44 (+ a TEST major asking for the missing agent-test_cmds gate test, and an STD minor on the now-dead tmp_dir call; each with a working `verify`) |
 
 **Baseline summary for the P2 dogfood gate (spec §1.2):** false COMPLETE 0/5 · manual resumes 1/5 (B4, harness-caused) · destructive 0/5 · BLOCKED 0/5 · recall: 1 scope-creep miss (B2) · $/COMPLETE ≈ $5.6 measured.
+
+## P2 dogfood gate verdict (spec §1.2, 2026-10-03)
+
+| gate | criterion | 0.16.2 baseline | hs 1.0 | pass |
+|---|---|---|---|---|
+| false COMPLETE | 0 | 0/5 | 0/5 (oracle 5/5) | yes |
+| manual resumes or state edits | 0 | 1 (B4, harness kill) | 0 | yes |
+| destructive actions | 0 | 0 | 0 (B4's PROGRESS.md was a 0.16 hook nag, fixed ed3ce01) | yes |
+| BLOCKED count | ≤ baseline | 0 | 0 | yes |
+| seeded-bug recall | ≥ baseline | 3/3 | 3/3 | yes |
+| $ per COMPLETE (tracked) | report | ≈ $5.6 | ≈ $0.66 | 8.5× cheaper |
+| unattended completion (tracked) | report | 4/5 | 5/5 | — |
+
+**Verdict: PASS. P3 may start** (remove the 0.16 loop pieces in the same phase their replacements ship; `/squad-fleet` 0.16 stays until P4).
+
+Caveats recorded honestly: all hs runs used the headless driver (no orchestrator LLM); the agent-tool driver was smoke-tested on the toy repo only ($2.67, COMPLETE) and should be benched on one B task before P3 removes `/happysquad-loop`. The bench is 5 small tasks on one repo; it says "not worse and much cheaper", not "better in general".
