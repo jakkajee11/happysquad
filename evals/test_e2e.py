@@ -31,6 +31,7 @@ SCENARIOS = {
     "repeat-escalate": 11,
     "parallel-2ws": 6,
     "parallel-deps": 6,  # util depends_on calc: IMPLEMENT and TEST each come as two sequential single dispatches
+    "ownership-gap": 6,  # implementer stops on a gap -> architect re-run in-iteration -> fresh IMPLEMENT-i1-r1 consumed
     "ownership-violation": 9,
     "risk-sec": 5,
     "risk-sec-blocks": 9,

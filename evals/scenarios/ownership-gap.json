@@ -1,0 +1,17 @@
+{
+  "_expect": "COMPLETE",
+  "_dispatches": 6,
+  "_note": "IMPLEMENT-i1 stops with an ownership_gap (src/util.js). The engine routes to ARCHITECT inside the same iteration (gap_count 1 -> no bump) as ARCHITECT-i1-r1, then re-dispatches IMPLEMENT into a FRESH dir IMPLEMENT-i1-r1 (retry_impl carried from st.retry). That second output must be consumed: the first real headless run stranded here because the re-dispatch reused IMPLEMENT-i1 and the settled-consume dedup treated the new out.json as already consumed. ARCHITECT-i1-r1 falls through to the happy architect (owns src/calc.js, test_owned test/mul.test.js). Sequence: ARCH, IMPL(gap), ARCH-r1, IMPL-r1, TEST-r1, REVIEW = 6, COMPLETE at i1.",
+  "IMPLEMENT-i1": {
+    "out": {"phase": "IMPLEMENT", "workstream": null, "files": [], "build_cmds": [], "unmet_ac": [],
+            "design_conflict": null,
+            "ownership_gap": {"file": "src/util.js", "reason": "design's handoff mentions a helper module that is not in owned_files"}}
+  },
+  "IMPLEMENT-i1-r1": {
+    "out": {"phase": "IMPLEMENT", "workstream": null, "files": ["src/calc.js"], "build_cmds": [], "unmet_ac": []},
+    "files": {
+      "src/calc.js": "export function add(a, b) {\n  return a + b;\n}\n\nexport function sub(a, b) {\n  return a - b;\n}\n\nexport function mul(a, b) {\n  return a * b;\n}\n"
+    },
+    "artifacts": {"implementation.md": "- src/calc.js: add mul() (second attempt, after the ownership map was fixed)\n"}
+  }
+}

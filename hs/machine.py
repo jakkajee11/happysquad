@@ -226,7 +226,7 @@ def _vars(root, st, cfg, spec):
         "feedback_path": rel(os.path.join(rdir, "feedback.md")) if os.path.isfile(os.path.join(rdir, "feedback.md")) else None,
         "implementation_path": None, "test_report_path": None, "gates_summary": None,
         "owned_files": None, "test_owned_files": None, "ac_list": None, "untestable": None,
-        "workstream": spec.get("ws"), "agent": spec.get("agent"), "inner_pass": st.get("inner_pass", 0),
+        "workstream": spec.get("ws") or "null", "agent": spec.get("agent"), "inner_pass": st.get("inner_pass", 0),
         "mode": "delta" if st.get("delta") else ("single" if st["review_mode"] == "single" or st.get("lite") else "split-on-risk"),
         "axis": spec.get("axis"), "axis_checklist": None, "risk_matches": None,
         "specialist_reports": st.get("specialist_reports") or None, "prior_findings": None,
@@ -495,10 +495,16 @@ def advance(root, run_id, cfg):
         # replayed: the event alone proves nothing was transitioned. Dedup by "a later event for the
         # same phase_dir exists" instead of by the consume event itself.
         evs = S.read_events(rdir)
+        last_dispatch = {}
+        for i, ev in enumerate(evs):
+            if ev.get("event") == "dispatch":
+                last_dispatch[ev.get("data", {}).get("phase_dir")] = i
         settled = set()
         for i, ev in enumerate(evs):
             if ev.get("event") == "consume":
                 pdn = ev.get("data", {}).get("phase_dir")
+                if i < last_dispatch.get(pdn, -1):
+                    continue  # re-dispatched into this phase dir since: that consume is history, not this output
                 if any(e.get("data", {}).get("phase_dir") == pdn or e.get("event") in ("transition", "gates.start", "review", "block")
                        for e in evs[i + 1:]):
                     settled.add(pdn)
@@ -529,6 +535,7 @@ def advance(root, run_id, cfg):
             S.save_state(rdir, st)
             return next_action(root, run_id, cfg)
         # 3. internal transitions
+        _heal(rdir, st)
         act = _step(root, rdir, st, cfg)
         if act is not None:
             return act
@@ -536,9 +543,44 @@ def advance(root, run_id, cfg):
     return next_action(root, run_id, cfg)
 
 
+def _normalize_out(out):
+    """Agents sometimes fill optional fields with '' / {} / '(none)' instead of null; treat those as absent."""
+    gap = out.get("ownership_gap")
+    if isinstance(gap, dict) and not (gap.get("file") or "").strip():
+        out["ownership_gap"] = None
+    dc = out.get("design_conflict")
+    if isinstance(dc, str) and not dc.strip():
+        out["design_conflict"] = None
+    if out.get("workstream") in ("", "(none)", "null", "None"):
+        out["workstream"] = None
+    return out
+
+
+def _heal(rdir, st):
+    """A workstream/specialist left at 'dispatched' with no pending entry and no gate is stranded
+    (driver restarted mid-wave, or an old bug); put it back to 'pending' so _needed() re-dispatches."""
+    pend = {(p["phase"], p.get("ws"), p.get("axis")) for p in st.get("pending", [])}
+    gate_ws = {(g.get("phase"), g.get("ws")) for g in (st.get("gates") or {}).values()}
+    single = st.get("mode") == "single"
+    fixed = []
+    for w in st.get("workstreams", []):
+        ws = None if single else w["name"]
+        for phase, key in (("IMPLEMENT", "impl"), ("TEST", "test")):
+            if w.get(key) == "dispatched" and (phase, ws, None) not in pend and (phase, ws) not in gate_ws:
+                w[key] = "pending"
+                fixed.append("%s:%s" % (phase, w["name"]))
+    for axis, stt in (st.get("specialists") or {}).items():
+        if stt == "dispatched" and ("SPECIALIST", None, axis) not in pend:
+            st["specialists"][axis] = "pending"
+            fixed.append("SPECIALIST:" + axis)
+    if fixed:
+        S.append_event(rdir, "heal", phase=st["state"], iteration=st["iteration"], data={"reset": fixed})
+
+
 def _consume(root, rdir, st, cfg, p, out):
     phase = p["phase"]
     pd = os.path.join(root, p["phase_dir"])
+    _normalize_out(out)
     if phase == "ARCHITECT":
         return _after_architect(root, rdir, st, cfg, out, pd)
     if phase == "IMPLEMENT":
@@ -602,8 +644,10 @@ def _validation_fail(root, rdir, st, cfg, p, errs):
                       % (p["phase"], st["validation_retry"], "; ".join(errs)))
     S.commit(rdir, st, "validate", phase=p["phase"], iteration=st["iteration"],
              data={"ok": False, "errors": errs, "retry": st["validation_retry"], "workstream": p.get("ws")})
+    # next -r<n> after whatever suffix the dir already carries (gate/gap retries also use -r)
+    m = re.search(r"-r(\d+)$", p["phase_dir"])
     base = re.sub(r"-r\d+$", "", p["phase_dir"])
-    pd = os.path.join(root, "%s-r%d" % (base, st["validation_retry"]))
+    pd = os.path.join(root, "%s-r%d" % (base, (int(m.group(1)) if m else 0) + 1))
     os.makedirs(os.path.join(pd, "logs"), exist_ok=True)
     spec = {"phase": p["phase"], "agent": p["agent"], "ws": p.get("ws"), "axis": p.get("axis"),
             "schema_phase": p["schema_phase"], "model": cfg["models"][p["agent"]], "phase_dir_abs": pd,
@@ -624,8 +668,15 @@ def _validation_fail(root, rdir, st, cfg, p, errs):
 
 def _after_architect(root, rdir, st, cfg, out, pd):
     st["size"] = out["size"]
+    # an architect re-run inside the same iteration (ownership gap / design conflict) must give the
+    # following IMPLEMENT/TEST fresh phase dirs: carry the run-level retry into per-ws retry counters
+    base_retry = st.get("retry", 0)
+    prev = {w["name"]: w for w in st.get("workstreams", [])}
     st["workstreams"] = [{"name": w["name"], "owned": w["owned"], "depends_on": w.get("depends_on") or [],
-                          "ac": w["ac"], "impl": "pending", "test": "pending"} for w in out["workstreams"]]
+                          "ac": w["ac"], "impl": "pending", "test": "pending",
+                          "retry_impl": max(prev.get(w["name"], {}).get("retry_impl", 0), base_retry),
+                          "retry_test": max(prev.get(w["name"], {}).get("retry_test", 0), base_retry)}
+                         for w in out["workstreams"]]
     st["untestable"] = out.get("untestable") or []
     st["test_owned"] = out.get("test_owned") or {}
     st["ac"] = out["ac"]
@@ -641,7 +692,8 @@ def _after_architect(root, rdir, st, cfg, out, pd):
             owned = [p for w in st["workstreams"] for p in w["owned"]]
             ac = [a for w in st["workstreams"] for a in w["ac"]]
             to = {k: v for k, v in st["test_owned"].items()}
-            st["workstreams"] = [{"name": "all", "owned": owned, "depends_on": [], "ac": ac, "impl": "pending", "test": "pending"}]
+            st["workstreams"] = [{"name": "all", "owned": owned, "depends_on": [], "ac": ac, "impl": "pending", "test": "pending",
+                                  "retry_impl": base_retry, "retry_test": base_retry}]
             st["test_owned"] = {"all": [g for v in to.values() for g in v]}
         st["mode"] = "single"
     else:

@@ -155,6 +155,16 @@ def run_headless(root, task, cfg, lite=False, max_parallel=None, isolate_wt=None
         S.append_event(dst, "isolate", data={"worktree": wt, "branch": branch})
     cap = max_parallel or cfg.get("max_parallel", 4)
     procs = {}
+    poll = cfg.get("headless", {}).get("poll_interval", 3)
+    events_path = os.path.join(S.run_dir(root, rid), "events.jsonl")
+
+    def _nev():
+        try:
+            return sum(1 for _ in open(events_path))
+        except OSError:
+            return 0
+
+    idle = 0
     while True:
         act = machine.next_action(root, rid, cfg)
         a = act.get("action")
@@ -166,7 +176,18 @@ def run_headless(root, task, cfg, lite=False, max_parallel=None, isolate_wt=None
         if a == "error":
             break
         if a == "advance":
+            before = _nev()
             machine.advance(root, rid, cfg)
+            if _nev() == before:
+                # no event means no progress; never spin on the engine
+                idle += 1
+                if idle >= 20:
+                    machine.block_manual(root, rid, cfg, "engine",
+                                         "driver made no progress after %d advance calls (%s)" % (idle, act.get("reason")))
+                    break
+                time.sleep(poll)
+            else:
+                idle = 0
             continue
         if a == "ask":
             machine.answer(root, rid, cfg, act["key"], act["default"])
@@ -180,6 +201,13 @@ def run_headless(root, task, cfg, lite=False, max_parallel=None, isolate_wt=None
             continue
         if a == "wait":
             files = act["files"]
+            idle = 0
+            # a pending entry with no child process (re-dispatch after heal/resume) must be launched
+            for d in act.get("dispatches", []):
+                if d["out_file"] not in procs and not os.path.isfile(os.path.join(root, d["out_file"])):
+                    while len([p for p in procs.values() if p.poll() is None]) >= cap:
+                        time.sleep(2)
+                    procs[d["out_file"]] = _run_one(root, d, cfg, os.path.join(".happysquad", "runs", rid, "logs"))
             # reap finished children; a child that exited without writing out.json is an agent error
             for f in files:
                 p = procs.get(f)
@@ -203,7 +231,7 @@ def run_headless(root, task, cfg, lite=False, max_parallel=None, isolate_wt=None
             if any(os.path.isfile(os.path.join(root, f)) for f in files):
                 machine.advance(root, rid, cfg)
                 continue
-            time.sleep(cfg.get("headless", {}).get("poll_interval", 3))
+            time.sleep(poll)
             continue
         break
     final = machine.next_action(root, rid, cfg)
