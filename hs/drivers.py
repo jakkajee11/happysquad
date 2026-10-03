@@ -48,17 +48,31 @@ ROLE_PROMPTS = {
 }
 
 
+def agent_file(agent):
+    """The v1 agent file (agents/hs-<agent>.md) when present, else the 0.16 one (agents/<agent>.md)."""
+    for name in ("hs-%s.md" % agent, "%s.md" % agent):
+        p = os.path.join(PLUGIN_ROOT, "agents", name)
+        if os.path.isfile(p):
+            return p, name.startswith("hs-")
+    return None, False
+
+
 def agents_json(agent):
-    """Build the `--agents` object for one agent: tools/model from agents/<agent>.md frontmatter, role prompt from ROLE_PROMPTS."""
-    path = os.path.join(PLUGIN_ROOT, "agents", "%s.md" % agent)
-    meta = _frontmatter(path)[0] if os.path.isfile(path) else {}
+    """Build the `--agents` object for one agent.
+
+    With a v1 file (agents/hs-<agent>.md) its body is the system prompt and its frontmatter the
+    tools/model. With only a 0.16 file, use its frontmatter tools but a short ROLE_PROMPTS entry,
+    because the 0.16 body contradicts the hs contract.
+    """
+    path, is_v1 = agent_file(agent)
+    meta, body = _frontmatter(path) if path else ({}, "")
     tools = [t.strip() for t in meta.get("tools", "").split(",") if t.strip()]
     if agent == "specialist" and not tools:
         tools = ["Read", "Grep", "Glob", "Bash", "Write"]
     if agent in ("reviewer", "specialist") and "Write" not in tools:
         tools.append("Write")  # review.md / out.json must be writable (0.16 frontmatter omits it)
     spec = {"description": (meta.get("description") or agent).splitlines()[0][:200],
-            "prompt": ROLE_PROMPTS.get(agent, "You are the %s." % agent)}
+            "prompt": body.strip() if (is_v1 and body.strip()) else ROLE_PROMPTS.get(agent, "You are the %s." % agent)}
     if tools:
         spec["tools"] = tools
     if meta.get("model"):
