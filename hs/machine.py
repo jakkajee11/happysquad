@@ -1009,3 +1009,67 @@ def block_manual(root, run_id, cfg, cause, reason):
     with S.locked(rdir):
         st = S.load_state(rdir)
         return _block(root, rdir, st, cause, reason)
+
+
+# --- resume (spec §8.7) ---------------------------------------------------------
+
+QUIET_SECS = 600  # an agent whose phase dir has not changed for this long is presumed dead
+
+
+def _newest_mtime(path):
+    newest = 0.0
+    for dp, _, fns in os.walk(path):
+        for fn in fns:
+            try:
+                newest = max(newest, os.path.getmtime(os.path.join(dp, fn)))
+            except OSError:
+                pass
+    return newest
+
+
+def resume(root, run_id, cfg):
+    """Recover a run whose driver stopped.
+
+    1. outputs already on disk → consumed by advance() (event `recover`)
+    2. gate children: alive → wait; dead without a file → advance() respawns
+    3. pending agents whose phase dir changed within QUIET_SECS → still running → wait
+    4. pending agents quiet for longer → drop them so next_action re-dispatches the same phase
+    """
+    rdir = S.run_dir(root, run_id)
+    gitutil.prune(root)
+    now_ts = S.parse_ts(S.now()).timestamp()
+    with S.locked(rdir):
+        st = S.load_state(rdir)
+        if st is None:
+            return {"action": "error", "message": "no such run %s" % run_id}
+        if st["state"] in TERMINAL:
+            return _done(root, rdir, st)
+        recovered, quiet, running = [], [], []
+        for p in list(st.get("pending", [])):
+            of = os.path.join(root, p["out_file"])
+            if os.path.isfile(of):
+                recovered.append(p["phase_dir"])
+                continue
+            pd = os.path.join(root, p["phase_dir"])
+            touched = _newest_mtime(pd)
+            since = S.parse_ts(p["dispatched_at"]).timestamp()
+            age = now_ts - max(touched, since)
+            if age < QUIET_SECS:
+                running.append(p["phase_dir"])
+            else:
+                quiet.append(p["phase_dir"])
+                st["pending"].remove(p)
+                # the phase goes back to pending so _needed() re-dispatches it
+                if p["phase"] in ("IMPLEMENT", "TEST"):
+                    w = _ws(st, p.get("ws")) or (st["workstreams"][0] if st.get("workstreams") else None)
+                    if w:
+                        w["impl" if p["phase"] == "IMPLEMENT" else "test"] = "pending"
+                elif p["phase"] == "SPECIALIST":
+                    st["specialists"][p["axis"]] = "pending"
+                elif p["phase"] == "INNER_FIX":
+                    st["inner_done"] = [a for a in st.get("inner_done", []) if a != p["agent"]]
+        S.commit(rdir, st, "resume", phase=st["state"], iteration=st["iteration"],
+                 data={"recovered": recovered, "quiet": quiet, "running": running})
+    if recovered:
+        S.append_event(rdir, "recover", phase=st["state"], iteration=st["iteration"], data={"phase_dirs": recovered})
+    return advance(root, run_id, cfg)

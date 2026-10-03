@@ -220,11 +220,7 @@ def cmd_resume(args):
     root = _root(args)
     cfg = C.load(root)
     rid = _rid(root, args)
-    from . import gitutil
-    gitutil.prune(root)
-    rdir = S.run_dir(root, rid)
-    S.append_event(rdir, "resume", data={})
-    act = _resolve(root, rid, cfg, machine.advance(root, rid, cfg))
+    act = _resolve(root, rid, cfg, machine.resume(root, rid, cfg))
     _out(act)
     sys.exit(_exit_for(act))
 
