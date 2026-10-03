@@ -40,7 +40,17 @@ Each agent in the brainstorm has a fixed perspective. Do not let them drift out 
 
 ## Prompt files
 
-Each agent's round instructions live in `${CLAUDE_PLUGIN_ROOT}/prompts/brainstorm/`, not in the agent's own definition. When dispatching an agent for a round, pass it the matching file path and the instruction to read and follow it exactly.
+Each agent's round instructions live in `${CLAUDE_PLUGIN_ROOT}/prompts/brainstorm/`, not in the agent's own definition. When dispatching an agent for a round, pass it the matching file path and the instruction to read and follow it exactly. The agent file supplies the role's judgement rules; the prompt file supplies the round instruction and the completion marker to emit.
+
+Dispatch each role with the `subagent_type` below — the dev-loop roles use the v1 (`hs-*`) agents, product uses its own agent:
+
+| Role        | `subagent_type`             |
+|-------------|------------------------------|
+| product     | `happysquad:product`        |
+| architecter | `happysquad:hs-architecter` |
+| implementer | `happysquad:hs-implementer` |
+| tester      | `happysquad:hs-tester`      |
+| reviewer    | `happysquad:hs-reviewer`    |
 
 | Round          | Agent       | File                           |
 |----------------|-------------|---------------------------------|
