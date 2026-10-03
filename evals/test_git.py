@@ -284,5 +284,31 @@ class Classify(unittest.TestCase):
         self.assertEqual(redgreen.classify(1, "AssertionError: 1 != 2\n"), "assertion")
 
 
+class SnapshotIgnoredHappysquad(unittest.TestCase):
+    """A repo whose root .gitignore lists .happysquad/ (this repo does) must still snapshot (seen in bench B5/B3)."""
+
+    def test_snapshot_with_ignored_happysquad_dir(self):
+        import subprocess, tempfile, shutil, os, sys
+        w = tempfile.mkdtemp(prefix="hs-gi-")
+        try:
+            open(os.path.join(w, "a.txt"), "w").write("a\n")
+            open(os.path.join(w, ".gitignore"), "w").write(".happysquad/\n")
+            subprocess.run(["git", "init", "-q"], cwd=w, check=True)
+            subprocess.run(["git", "add", "-A"], cwd=w, check=True)
+            subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"], cwd=w, check=True)
+            os.makedirs(os.path.join(w, ".happysquad", "runs"))
+            open(os.path.join(w, ".happysquad", "config.json"), "w").write("{}")
+            open(os.path.join(w, "b.txt"), "w").write("b\n")
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+            from hs import gitutil
+            sha = gitutil.snapshot(w, "t/base")
+            self.assertTrue(sha)
+            tree = subprocess.run(["git", "ls-tree", "-r", "--name-only", sha], cwd=w, capture_output=True, text=True).stdout.split()
+            self.assertIn("b.txt", tree)
+            self.assertFalse(any(t.startswith(".happysquad") for t in tree))
+        finally:
+            shutil.rmtree(w, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

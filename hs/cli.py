@@ -65,7 +65,10 @@ def cmd_init(args):
     os.makedirs(os.path.join(d, "runs"), exist_ok=True)
     gi = os.path.join(d, ".gitignore")
     if not os.path.isfile(gi):
-        S.atomic_write(gi, "*\n!.gitignore\n!config.json\n!stack-profile.md\n!stack-profile.json\n!risk-patterns.json\n")
+        # `*` with re-includes: the directory itself stays visible to git (so config.json can be
+        # committed) while runs/, current, .lock etc. are ignored. A bare `*` would hide the dir
+        # and git status would list `.happysquad/` as untracked forever.
+        S.atomic_write(gi, "/*\n!/.gitignore\n!/config.json\n!/stack-profile.md\n!/stack-profile.json\n!/risk-patterns.json\n")
     cp = C.config_path(root)
     if not os.path.isfile(cp):
         S.atomic_write_json(cp, {"build_cmd": None, "test_cmd": None, "coverage_report": None})

@@ -48,7 +48,11 @@ def snapshot(root, ref_name):
         if os.path.isfile(real):
             shutil.copy(real, idx)
         env = dict(os.environ, GIT_INDEX_FILE=idx)
-        git(root, "add", "-A", "--", ".", *EXCLUDE, env=env)
+        # Do not name .happysquad/knowledge in the pathspec: if the repo's own .gitignore already
+        # ignores them, git add errors out ("paths are ignored") even with :(exclude). Add everything
+        # the ignore rules allow, then drop the two dirs from the temp index explicitly.
+        git(root, "add", "-A", "--", ".", env=env)
+        git(root, "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".happysquad", "knowledge", env=env)
         tree = git(root, "write-tree", env=env).strip()
         sha = git(root, "commit-tree", tree, "-p", "HEAD", "-m", "happysquad snapshot %s" % ref_name).strip()
         git(root, "update-ref", "refs/happysquad/%s" % ref_name, sha)

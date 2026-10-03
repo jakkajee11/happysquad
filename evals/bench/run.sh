@@ -9,7 +9,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN="$(cd "$HERE/../.." && pwd)"
-TASK="${1:?task id B1..B5}"; ENGINE="${2:?engine 0.16|hs}"; shift 2
+TASK="${1:?task id B1..B5}"; ENGINE="${2:?engine 0.16|hs|hs-headless}"; shift 2
 BUDGET=8; MODEL=sonnet; KEEP=0; RESUME=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -60,13 +60,29 @@ case "$ENGINE" in
     PROMPT="/happysquad:hs-loop $TEXT"
     SYS="You are running unattended. Never ask the user anything; follow the skill exactly."
     ;;
-  *) echo "engine must be 0.16 or hs"; exit 2;;
+  hs-headless)
+    PROMPT=""   # hs drives claude -p itself; no orchestrator session
+    SYS=""
+    ;;
+  *) echo "engine must be 0.16, hs or hs-headless"; exit 2;;
 esac
 
 echo "task=$TASK engine=$ENGINE model=$MODEL budget=$BUDGET worktree=$WT"
 cd "$WT"
 START=$(date +%s)
 set +e
+if [ "$ENGINE" = "hs-headless" ]; then
+  # per-phase budget from --budget: 5 phases minimum; the engine enforces it per claude -p call
+  python3 - "$WT/.happysquad/config.json" "$BUDGET" <<'PY2'
+import json, sys
+p, b = sys.argv[1], float(sys.argv[2])
+c = json.load(open(p)); c.setdefault("headless", {})["budget_per_phase"] = round(b / 5, 2); c["headless"]["isolate"] = "none"
+json.dump(c, open(p, "w"), indent=2)
+PY2
+  "$PLUGIN/bin/hs" run start "$TEXT" --driver headless > "$OUT/hs.out" 2> "$OUT/claude.stderr"
+  RC=$?
+  : > "$OUT/claude.stream.jsonl"
+else
 claude -p "$PROMPT" \
   --plugin-dir "$PLUGIN" \
   --settings '{"enabledPlugins":{"happysquad@happytech.dev":false}}' \
@@ -77,6 +93,7 @@ claude -p "$PROMPT" \
   --output-format stream-json --verbose \
   > "$OUT/claude.stream.jsonl" 2> "$OUT/claude.stderr"
 RC=$?
+fi
 set -e
 SECS=$(( $(date +%s) - START ))
 
@@ -126,7 +143,23 @@ for l in open(os.path.join(out, "claude.stream.jsonl")):
                         bad.append(cmd[:120]); break
 s["destructive"] = bad
 # engine state
-if engine == "hs":
+if engine == "hs-headless":
+    runs = sorted(glob.glob(os.path.join(wt, ".happysquad", "runs", "*", "state.json")))
+    if runs:
+        rd = os.path.dirname(runs[-1])
+        st = json.load(open(runs[-1])); evs = [json.loads(x) for x in open(os.path.join(rd, "events.jsonl")) if x.strip()]
+        cost = 0.0; turns = 0
+        for lg in glob.glob(os.path.join(rd, "logs", "claude-*.jsonl")):
+            for x in open(lg):
+                try: m = json.loads(x)
+                except ValueError: continue
+                if m.get("type") == "result":
+                    cost += m.get("total_cost_usd") or 0; turns += m.get("num_turns") or 0
+        s.update({"state": st["state"], "iterations": st["iteration"], "dispatches": sum(1 for e in evs if e["event"] == "dispatch"),
+                  "cause": st.get("block_cause"), "coverage": st.get("verified_coverage"), "cost_usd": round(cost, 4), "turns": turns,
+                  "agent_errors": sum(1 for e in evs if e["event"] == "agent.error"), "heals": sum(1 for e in evs if e["event"] == "heal"),
+                  "asks": 0})
+elif engine == "hs":
     runs = sorted(glob.glob(os.path.join(wt, ".happysquad", "runs", "*", "state.json")))
     if runs:
         st = json.load(open(runs[-1])); evs = [json.loads(x) for x in open(os.path.join(os.path.dirname(runs[-1]), "events.jsonl")) if x.strip()]
