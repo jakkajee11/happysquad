@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.0 — 2026-10-03
+
+### Added
+- `hs fleet start|advance|wait|status|cleanup` (spec §12): N independent tasks as headless runs, one git worktree each under `<repo>-hs-wt/fleet-<id>/<slug>` on branch `fleet/<id>/<slug>`, scheduled up to `max_parallel`; a child whose driver dies is re-dispatched once via `hs resume`, then marked stalled; aggregate report with merge commands; nothing is ever merged. `/squad-fleet` and the fleet skill (~350 words) relay it.
+- `evals/test_fleet.py`: 6 fake-driver tests (isolation, max_parallel, BLOCKED sibling, idempotent advance, cleanup, tasks file).
+
+### Changed
+- `/brainstorm` dispatches the v1 `hs-*` agents for the four engineering roles (`product` unchanged).
+
+### Removed
+- The four 0.16 dev-loop agent files (`agents/{architecter,implementer,tester,reviewer}.md`) and the 0.16 fleet orchestrator prose. The 0.16 chief reviewer is kept in `happysquad-ext` and at tag `v0.16.2` for the recall baseline.
+
+### Still 1.1
+- `/squad-review` review-only, `ask`/non-interactive defaults (`interactive` is a no-op), `hs brainstorm`, `hs wiki lint`, tracker frontier/drain, context checkpoint, `escalation.model`.
+
 ## 1.0.0-rc1 — 2026-10-03
 
 The engine rewrite (spec: `docs/spec/v1-rewrite.md`). Every deterministic part of the dev loop moved out of LLM prose into a python3 stdlib engine, `bin/hs`.

@@ -52,7 +52,10 @@ p = os.path.join(sys.argv[0] if False else ".", "agents", "reviewer.md")
 PY
 )")
     # build --agents from the 0.16 reviewer file (frontmatter tools + body as prompt)
-    AGENTS="$(python3 - "$PLUGIN/agents/reviewer.md" <<'PY'
+    # the 0.16 chief reviewer now lives in the happysquad-ext sibling repo (moved in 1.0.0-rc1)
+    R016="$PLUGIN/../happysquad-ext/agents/reviewer.md"
+    [ -f "$R016" ] || R016="$(git -C "$PLUGIN" show v0.16.2:agents/reviewer.md > /tmp/hs-016-reviewer.md && echo /tmp/hs-016-reviewer.md)"
+    AGENTS="$(python3 - "$R016" <<'PY'
 import json, sys
 text = open(sys.argv[1]).read()
 head, _, body = text[3:].partition("\n---")
