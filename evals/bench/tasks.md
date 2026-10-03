@@ -37,6 +37,7 @@ Baseline (0.16.2) and v1.0 results are appended below as they are collected.
 | B3 | hs 1.0 headless | COMPLETE | 1 | 4 | 0 | 0 | 0 | 0.36 | pass (oracle cov 12.75%, 202s) |
 | B4 | hs 1.0 headless | COMPLETE | 1 | 4 | 0 | 0 | 0 | 0.63 | pass (oracle cov 13.46%, 467s) (+PROGRESS.md: 0.16 Stop hook nag, see notes) |
 | B5 | hs 1.0 headless | COMPLETE | 1 | 5 | 0 | 0 | 0 | 0.62 | pass (oracle cov 12.71%, 232s) |
+| B5 | hs 1.0 agent-tool (/hs-loop in a claude -p orchestrator) | COMPLETE | 1 | 4 | 0 | 0 | 0 | 3.83 | pass (oracle cov 12.7%, 315s; orchestrator ran 10 hs commands, 20 turns; PROGRESS.md again from the 0.16 Stop hook, run predates ed3ce01) |
 
 Baseline notes (0.16.2, sonnet on every agent, cap 3, threshold 50, all five launched in parallel 2026-10-02 18:25 UTC):
 
@@ -81,4 +82,4 @@ Baseline notes (0.16.2, sonnet on every agent, cap 3, threshold 50, all five lau
 
 **Verdict: PASS. P3 may start** (remove the 0.16 loop pieces in the same phase their replacements ship; `/squad-fleet` 0.16 stays until P4).
 
-Caveats recorded honestly: all hs runs used the headless driver (no orchestrator LLM); the agent-tool driver was smoke-tested on the toy repo only ($2.67, COMPLETE) and should be benched on one B task before P3 removes `/happysquad-loop`. The bench is 5 small tasks on one repo; it says "not worse and much cheaper", not "better in general".
+Caveats recorded honestly: the five hs rows used the headless driver (no orchestrator LLM). The agent-tool driver was then benched on B5 (row above): COMPLETE at i1, 4 dispatches, 0 asks, oracle pass, **$3.83** — i.e. the orchestrator session costs about $3.2 on top of the ≈$0.6 of agent work, so the two drivers sit in different cost regimes (≈$0.66 vs ≈$3.8 per COMPLETE; 0.16.2 was ≈$5.6). Both are below baseline; headless is the default for unattended work. The bench is 5 small tasks on one repo; it says "not worse and much cheaper", not "better in general".
