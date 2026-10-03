@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0 — in progress
+## 1.1.0 — 2026-10-03
 
 ### Added
 - `/squad-review` is back: `hs run review-only [--base <ref>] [--task …] [--driver headless]` reviews the diff vs the merge-base with main (or `--base`) with the full review stage — test gate and coverage over the diff, risk-routed specialists, chief reviewer — without running the architect/implementer/tester. A FAIL ends the run with `verdict: FAIL` and `feedback.md`; it never routes.
@@ -9,6 +9,9 @@
 - Tracker frontier: `hs frontier` reads the Matt Pocock issue tracker (`docs/agents/issue-tracker.md`: local `.scratch/*/issues/*.md`, GitHub via `gh`, GitLab via `glab`) and returns the ready-for-agent tickets whose blockers are done and that are not `squad:passed`. `hs fleet start --frontier` runs that snapshot as a fleet; `--drain` runs it serially (max 1) and pumps newly-unblocked tickets in as children finish; a completed ticket is labelled `squad:passed` (never closed). Empty frontier → `status: empty`, no fleet dir — safe under `/loop 5m /squad-fleet --drain`.
 - Context checkpoint (spec §8.9, agent-tool driver only): after `checkpoint.iterations` (3) or `checkpoint.dispatches` (12) in one Claude session, `hs` returns a `checkpoint` action between phases — writes `HANDOFF.md` and tells the orchestrator to hand off to a fresh session with `/squad-resume`. Once per session; never for headless runs; `checkpoint.enabled: false` turns it off.
 - `escalation.model` (spec §8.6): when convergence would first take a repeated blocker away from the agent that failed it (repeat / zero-progress → architecter), spend one borrowed round on that model for the implementer/tester instead; once per run, then convergence resumes. Default off.
+
+### Deferred to 1.2
+- `hs brainstorm` (moving the 3-round brainstorm orchestration into the engine). The 0.16-style skill-driven brainstorm still works end to end — it ran this project's own spec review (5+5+1+4 dispatches, zero marker failures) — so there is no measured defect to fix; the gain would be code-owned resume/markers only. Revisit when a brainstorm actually stalls.
 
 ### Changed
 - `interactive` is no longer a config key (accepted silently from old configs). The engine never asks a question; every prompt 0.16 used to raise was either moved into the skills or removed (spec Q8).
