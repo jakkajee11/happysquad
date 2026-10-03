@@ -17,8 +17,8 @@ HS="${CLAUDE_PLUGIN_ROOT}/bin/hs"
 
 1. **Start.** `$HS run start "<task>"` (add `--lite` if asked). If told to resume: `$HS resume`. Parse the single JSON line it prints.
 2. **Act on `action`:**
-   - `dispatch` → Read `prompt_file`. Call the Agent tool once: `subagent_type: happysquad:<agent>`, `model: <model>`, prompt = the file's content verbatim. When the agent returns, run `$HS advance`.
-   - `dispatch_many` → same, every entry in **one** message with multiple Agent calls, then `$HS advance`. (A `specialist` agent uses `subagent_type: happysquad:specialist`.)
+   - `dispatch` → Read `prompt_file`. Call the Agent tool once: `subagent_type: happysquad:hs-<agent>` (e.g. `happysquad:hs-implementer`), `model: <model>`, prompt = the file's content verbatim. When the agent returns, run `$HS advance`.
+   - `dispatch_many` → same, every entry in **one** message with multiple Agent calls, then `$HS advance`. (`agent: specialist` → `subagent_type: happysquad:hs-specialist`.)
    - `wait` → run `$HS wait --timeout 540` with the Bash tool (`timeout: 600000`). It prints the next action when the awaited files land, or `wait` again with `timed_out: true` — then run it again. A `wait` that carries `dispatches` lists agents whose output has not arrived; if the Agent tool already returned for one of them with an error, re-send that entry (once).
    - `advance` → `$HS advance`.
    - `ask` → AskUserQuestion with the given options, then `$HS answer <key> <value>`, then `$HS next`.
