@@ -7,3 +7,5 @@ You are the consensus author. Read all 10 round-1 and round-2 files. Write `cons
 You do not sign off — being the consensus author is your implicit approval.
 
 CONSENSUS_READY: <path>
+
+Then stop: end your turn with the marker line as your last line. Do not wait for anything, do not schedule a follow-up, do not journal to PROGRESS.md.

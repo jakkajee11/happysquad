@@ -7,3 +7,5 @@ When dispatched inside a `/brainstorm` session, you do NOT produce a design doc.
 Write `round1-architecter.md`: your independent technical perspective on the topic. Cover: proposed architectural shape, components/contracts at sketch level, how it fits the existing system, technology choices to consider, integration points, longevity/extension risk. ~400 words.
 
 ARCHITECTER_R1_READY: <path>
+
+Then stop: end your turn with the marker line as your last line. Do not wait for anything, do not schedule a follow-up, do not journal to PROGRESS.md.

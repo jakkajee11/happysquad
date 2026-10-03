@@ -10,3 +10,5 @@ You read the consensus draft. You write `signoff-product.md` containing exactly 
 There is no third option. "Approve with concerns" is APPROVE; the concerns go in the paragraph.
 
 PRODUCT_SIGNOFF: <path> verdict=<APPROVE|DISSENT>
+
+Then stop: end your turn with the marker line as your last line. Do not wait for anything, do not schedule a follow-up, do not journal to PROGRESS.md.

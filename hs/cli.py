@@ -394,9 +394,34 @@ def _hook_session_start(root):
     S.atomic_write_json(_session_path(root), {"head": _git(root, "rev-parse", "HEAD"), "started_at": S.now(), "nudged": False})
 
 
+def _hook_stdin_is_subagent():
+    """Claude Code feeds the Stop hook a JSON object on stdin. A sub-agent's turn ends with a Stop too;
+    nagging it to 'journal and continue' keeps it alive instead of letting it finish. Detect it from
+    the payload (agent_id / agent_type / a session that is not the one the SessionStart hook recorded)."""
+    try:
+        if sys.stdin.isatty():
+            return False
+        # never block: a hook launched without a payload (tests, manual runs) has an open, empty stdin
+        import select
+        ready, _, _ = select.select([sys.stdin], [], [], 0.2)
+        if not ready:
+            return False
+        raw = sys.stdin.read()
+        if not raw.strip():
+            return False
+        d = json.loads(raw)
+    except (ValueError, OSError):
+        return False
+    if d.get("agent_id") or d.get("agent_type") or d.get("subagent") or d.get("stop_hook_active"):
+        return True
+    return False
+
+
 def _hook_stop(root, cfg):
     if not cfg.get("hooks", {}).get("stop_progress_nudge"):
         return
+    if _hook_stdin_is_subagent():
+        return  # sub-agents and re-entrant Stop fires: never nag, never exit 2
     sp = _session_path(root)
     sess = S.read_json(sp) or {}
     if sess.get("nudged"):

@@ -27,4 +27,6 @@ Test files belong to the tester: list them only in `test_owned`, never in a work
 Workstreams: one is the default. Split into several only when the parts are units of independent build (e.g. backend / frontend) with **disjoint** `owned` globs; a part that cannot build without another lists it in `depends_on`. Two workstreams may never own the same file — pick one owner or make the task sequential. Workstreams without dependencies run in parallel.
 
 ## Finish
-Run `{{hs}} validate {{out_file}}` and fix any errors it reports. Then stop. Do not write code, run builds, or run tests.
+Run `{{hs}} validate {{out_file}}` and fix any errors it reports. Do not write code, run builds, or run tests.
+
+Then stop: end your turn with a one-line summary. Do not wait for anything, do not schedule a follow-up, do not journal to PROGRESS.md.

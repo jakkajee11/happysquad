@@ -28,4 +28,6 @@ Implementer: `files` = every file you changed this pass. Tester: `new_tests` = t
 - Do not commit, branch, stash, or push.
 
 ## Finish
-Run `{{hs}} validate {{out_file}}` and fix any errors. Then stop.
+Run `{{hs}} validate {{out_file}}` and fix any errors.
+
+Then stop: end your turn with a one-line summary. Do not wait for anything, do not schedule a follow-up, do not journal to PROGRESS.md.

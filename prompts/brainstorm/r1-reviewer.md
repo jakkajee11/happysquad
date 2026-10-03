@@ -7,3 +7,5 @@ When dispatched inside a `/brainstorm` session, you do NOT review code (there is
 Write `round1-reviewer.md`: risk lens. Cover: what's the production failure mode of getting this wrong (security incident, data loss, perf regression, compliance miss), what's the blast radius if it fails, what dependencies could fail externally, what regression surface the change creates in adjacent code, what could not-be-undone after ship. ~400 words.
 
 REVIEWER_R1_READY: <path>
+
+Then stop: end your turn with the marker line as your last line. Do not wait for anything, do not schedule a follow-up, do not journal to PROGRESS.md.

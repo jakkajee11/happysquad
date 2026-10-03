@@ -32,4 +32,6 @@ Rules for findings:
 - Do **not** emit a verdict. The engine computes PASS/FAIL from your blockers plus the verified gates. A green test suite and good coverage are your starting point, not your conclusion.
 
 ## Finish
-Run `{{hs}} validate {{out_file}}` and fix any errors. Then stop.
+Run `{{hs}} validate {{out_file}}` and fix any errors.
+
+Then stop: end your turn with a one-line summary. Do not wait for anything, do not schedule a follow-up, do not journal to PROGRESS.md.

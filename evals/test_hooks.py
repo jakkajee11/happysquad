@@ -18,7 +18,7 @@ def _run(w, which, env=None):
     e = dict(os.environ)
     e.pop("HS_CHILD", None)
     e.update(env or {})
-    return subprocess.run([HS, "--root", w, "hook", which], cwd=w, capture_output=True, text=True, env=e)
+    return subprocess.run([HS, "--root", w, "hook", which], cwd=w, input="", capture_output=True, text=True, env=e)
 
 
 def _happysquad_run(w, run_id, state_doc):
@@ -113,6 +113,43 @@ class Stop(unittest.TestCase):
         p2 = _run(self.w, "stop")
         self.assertEqual(p2.returncode, 0)
         self.assertEqual(p2.stderr, "")
+
+
+class StopHookSubagentGuard(unittest.TestCase):
+    """A Stop fired for a sub-agent (agent_id/agent_type in the stdin payload) or a re-entrant Stop
+    (stop_hook_active) must never nag with exit 2, even with the nudge enabled and dirty source."""
+
+    def _repo(self):
+        import json, os, subprocess, tempfile
+        w = tempfile.mkdtemp(prefix="hs-hook-sub-")
+        subprocess.run(["git", "init", "-q"], cwd=w, check=True)
+        open(os.path.join(w, "a.py"), "w").write("x = 1\n")
+        subprocess.run(["git", "add", "-A"], cwd=w, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"], cwd=w, check=True)
+        os.makedirs(os.path.join(w, ".happysquad"))
+        json.dump({"hooks": {"stop_progress_nudge": True}}, open(os.path.join(w, ".happysquad", "config.json"), "w"))
+        json.dump({"head": "x", "started_at": "2026-10-03T00:00:00Z", "nudged": False}, open(os.path.join(w, ".happysquad", ".session"), "w"))
+        open(os.path.join(w, "a.py"), "a").write("y = 2\n")  # dirty source → the nudge would fire
+        return w
+
+    def _stop(self, w, payload):
+        import json, os, subprocess, sys
+        hs = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "hs")
+        return subprocess.run([sys.executable, hs, "hook", "stop"], cwd=w, input=json.dumps(payload), capture_output=True, text=True)
+
+    def test_main_session_still_nags(self):
+        w = self._repo()
+        p = self._stop(w, {"session_id": "s1", "cwd": w, "hook_event_name": "Stop"})
+        self.assertEqual(p.returncode, 2, p.stderr)
+
+    def test_subagent_payload_is_silent(self):
+        for payload in ({"session_id": "s1", "agent_id": "a1", "agent_type": "general-purpose"},
+                        {"session_id": "s1", "agent_id": "a1"},
+                        {"session_id": "s1", "stop_hook_active": True}):
+            w = self._repo()
+            p = self._stop(w, payload)
+            self.assertEqual(p.returncode, 0, (payload, p.stderr))
+            self.assertEqual(p.stderr, "")
 
 
 if __name__ == "__main__":
