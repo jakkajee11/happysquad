@@ -144,14 +144,19 @@ def _run_one(root, d, cfg, log_dir):
     return p
 
 
+def drive_existing(root, rid, cfg):
+    """Drive an already-started run (e.g. review-only) to done, in place."""
+    return _drive(root, rid, cfg, use_wt=False, branch=None)
+
+
 def run_headless(root, task, cfg, lite=False, max_parallel=None, isolate_wt=None):
     """Drive a whole run to done. Returns the final action dict."""
-    rid_root = root
     use_wt = (isolate_wt if isolate_wt is not None else cfg.get("headless", {}).get("isolate", "worktree")) == "worktree"
     act = machine.start(root, task, cfg, lite=lite, driver="headless")
     if act.get("action") == "error":
         return act
     rid = S.current_run_id(root)
+    branch = None
     if use_wt:
         wt, branch = isolate(root, rid)
         # move the run directory into the worktree so every path is worktree-relative
@@ -167,6 +172,11 @@ def run_headless(root, task, cfg, lite=False, max_parallel=None, isolate_wt=None
         root = wt
         cfg = C.load(root)
         S.append_event(dst, "isolate", data={"worktree": wt, "branch": branch})
+    return _drive(root, rid, cfg, use_wt=use_wt, branch=branch, max_parallel=max_parallel)
+
+
+def _drive(root, rid, cfg, use_wt=False, branch=None, max_parallel=None):
+    """The headless action loop for run `rid` rooted at `root` (worktree or in place)."""
     cap = max_parallel or cfg.get("max_parallel", 4)
     procs = {}
     poll = cfg.get("headless", {}).get("poll_interval", 3)

@@ -6,7 +6,6 @@ import sys
 
 DEFAULTS = {
     "driver": "agent-tool",
-    "interactive": True,
     "cap": 5,
     "inner_cap": 2,
     "gate_retries": 1,
@@ -47,6 +46,9 @@ DEFAULTS = {
     "fleet": {"base_branch": None},
 }
 
+# keys accepted but ignored: the engine never asks a question (spec Q8), so `interactive` has no meaning
+_RETIRED = ("interactive",)
+
 # keys whose value is a dict merged one level deep rather than replaced
 _NESTED = ("models", "lite", "headless", "hooks", "wiki", "fleet")
 
@@ -68,6 +70,8 @@ def load(root, warn=True):
         user = json.load(f)
     unknown = []
     for k, v in user.items():
+        if k in _RETIRED:
+            continue  # accepted for backward compatibility, no effect
         if k not in DEFAULTS:
             unknown.append(k)
             continue

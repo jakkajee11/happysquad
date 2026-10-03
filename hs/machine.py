@@ -199,6 +199,79 @@ def start(root, task, cfg, lite=False, driver=None):
     return next_action(root, run_id, cfg)
 
 
+def start_review_only(root, cfg, base=None, task=None):
+    """Review-only run (spec §14 /squad-review): no ARCHITECT/IMPLEMENT/TEST agents.
+
+    The diff vs `base` (default: merge-base with the upstream default branch, else HEAD) is treated
+    as a finished single-workstream change: the test gate runs on it, then RISK → SPECIALISTS →
+    REVIEW exactly as in a normal run. The verdict routes nowhere; FAIL just reports findings.
+    """
+    if not gitutil.is_repo(root):
+        return {"action": "error", "message": "not a git repository"}
+    if not cfg.get("test_cmd"):
+        return {"action": "error", "message": "config.test_cmd is null — set it in .happysquad/config.json"}
+    gitutil.prune(root)
+    if not base:
+        base = _default_base(root)
+    changed = gitutil.changed_files(root, base)
+    if not changed:
+        return {"action": "error", "message": "nothing to review: no changes vs %s" % (base or "HEAD")}
+    ts = S.now().replace("-", "").replace(":", "").replace("T", "-").replace("Z", "")
+    run_id = "%s-review-%s" % (ts, slug(task or "diff vs " + str(base)[:7]))
+    rdir = S.run_dir(root, run_id)
+    os.makedirs(os.path.join(rdir, "prompts"), exist_ok=True)
+    with S.locked(rdir):
+        src = [f for f in changed if not _looks_like_test(f)]
+        tests = [f for f in changed if _looks_like_test(f)]
+        st = {
+            "run_id": run_id, "task": task or "Review the changes vs %s" % (base or "HEAD"), "driver": cfg["driver"],
+            "mode": "single", "lite": False, "lite_forced": False, "size": None, "review_only": True,
+            "review_mode": cfg.get("review_mode", "split-on-risk"),
+            "base_ref": base, "iter_ref": None, "proof_ref": base, "proven": [],
+            "state": "TEST", "iteration": 1, "inner_pass": 0,
+            "gate_retry": 0, "validation_retry": 0, "retry": 0, "gap_count": 0,
+            "cap": 1, "inner_cap": 0, "coverage_threshold": cfg["coverage_threshold"],
+            "cmds": {"build": cfg.get("build_cmd"), "test": cfg.get("test_cmd"), "coverage_report": cfg.get("coverage_report")},
+            "workstreams": [{"name": "diff", "owned": src or changed, "depends_on": [], "ac": [], "impl": "done", "test": "pending"}],
+            "untestable": [], "test_owned": {"diff": tests}, "ws_impl_files": {"diff": src},
+            "impl_phase_dirs": [], "test_phase_dirs": [], "review_phase_dirs": [],
+            "pending": [], "gates": {}, "findings": {}, "arch_iterations": [], "zero_progress": 0,
+            "risk": None, "specialists": {}, "specialist_reports": [], "inner_verify": {}, "delta": False,
+            "started_at": S.now(),
+        }
+        S.atomic_write(os.path.join(rdir, "task.md"), st["task"] + "\n")
+        S.atomic_write(os.path.join(rdir, "design.md"),
+                       "# Review-only run\n\nNo design: the diff vs `%s` is reviewed as-is.\n\nChanged files:\n%s\n"
+                       % (base, "\n".join("- " + f for f in changed)))
+        # synthetic TEST phase: the gate runs the configured suite + coverage over the diff; no tester agent
+        pd = os.path.join(rdir, phase_dir_name("TEST", 1))
+        os.makedirs(os.path.join(pd, "logs"), exist_ok=True)
+        S.atomic_write_json(os.path.join(pd, "out.json"),
+                            {"phase": "TEST", "workstream": None, "test_cmds": [], "coverage_report": None,
+                             "test_files": tests, "new_tests": [], "ac_map": {}, "untestable": [], "redgreen": None, "findings": []})
+        st["test_phase_dirs"].append(os.path.relpath(pd, root))
+        S.commit(rdir, st, "run.start", data={"base_ref": base, "review_only": True, "files": len(changed)})
+        _spawn_gates(root, rdir, st, pd, phase="TEST")
+        S.commit(rdir, st, "gates.start", phase="TEST", iteration=1, data={"phase_dir": os.path.relpath(pd, root), "review_only": True})
+        S.set_current(root, run_id)
+    return next_action(root, run_id, cfg)
+
+
+def _default_base(root):
+    for cand in ("origin/main", "origin/master", "main", "master"):
+        p = subprocess.run(["git", "merge-base", "HEAD", cand], cwd=root, capture_output=True, text=True)
+        if p.returncode == 0 and p.stdout.strip() and p.stdout.strip() != gitutil.head(root):
+            return p.stdout.strip()
+    return gitutil.head(root)
+
+
+def _looks_like_test(path):
+    p = path.lower()
+    return ("/test/" in "/" + p or "/tests/" in "/" + p or "/__tests__/" in "/" + p or "/spec/" in "/" + p
+            or p.endswith((".test.js", ".test.ts", ".test.tsx", ".spec.js", ".spec.ts", "_test.go", "_test.py", "tests.cs"))
+            or os.path.basename(p).startswith("test_"))
+
+
 # --- prompts -----------------------------------------------------------------
 
 def _ws(st, name):
@@ -392,7 +465,13 @@ def _done(root, rdir, st):
         d["coverage"] = st["verified_coverage"]
     if st["state"] == "BLOCKED":
         d["blocked_md"] = rel(os.path.join(rdir, "BLOCKED.md"))
-    if st["state"] == "COMPLETE":
+    if st["state"] == "COMPLETE" and st.get("review_only"):
+        d["verdict"] = st.get("review_verdict", "PASS")
+        v = S.read_json(os.path.join(root, st["review_phase_dirs"][-1], "verdict.json")) if st.get("review_phase_dirs") else None
+        if v:
+            d["blockers"] = len(v.get("blockers", [])); d["majors"] = len(v.get("majors", []))
+            d["feedback"] = rel(os.path.join(rdir, "feedback.md")) if d["blockers"] else None
+    elif st["state"] == "COMPLETE":
         d["suggested_commit"] = "feat: %s" % st["task"].splitlines()[0][:60]
         d["wiki_offer"] = True
     return d
@@ -735,6 +814,12 @@ def _after_gates(root, rdir, st, cfg, key, g, result):
         return _gate_fail(root, rdir, st, cfg, phase, result, w, "impl")
     if phase == "TEST":
         cov = result.get("coverage") or {}
+        if st.get("review_only"):
+            # nothing to re-dispatch: a red suite or unparseable coverage is simply reported to the reviewer
+            if w:
+                w["test"] = "done"
+            _merge_test_gate(st, result)
+            return None
         if cov.get("status") == "unparseable":
             return _gate_fail(root, rdir, st, cfg, phase, result, w, "test")
         if result.get("tests") == "fail":
@@ -933,6 +1018,14 @@ def _after_review(root, rdir, st, cfg, out, pd):
         st["state"] = "COMPLETE"
         S.commit(rdir, st, "complete", phase="REVIEW", iteration=st["iteration"], data={})
         gitutil.delete_refs(root, st["run_id"])
+        return _done(root, rdir, st)
+    if st.get("review_only"):
+        # a review-only run never routes: FAIL is the answer, with the findings on disk
+        _write_feedback(rdir, st, blockers, majors, route)
+        st["state"] = "COMPLETE"
+        st["review_verdict"] = "FAIL"
+        S.commit(rdir, st, "complete", phase="REVIEW", iteration=st["iteration"],
+                 data={"review_only": True, "verdict": "FAIL", "blockers": len(blockers)})
         return _done(root, rdir, st)
     # convergence (spec §8.3) — only reviewer findings are tracked; gate blockers (G-*) are
     # mechanical and self-clearing, so they neither count as repeats nor as "unresolved"

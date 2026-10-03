@@ -128,7 +128,7 @@ def cmd_config(args):
 def cmd_run(args):
     root = _root(args)
     cfg = C.load(root)
-    if args.no_parallel:
+    if getattr(args, "no_parallel", False):
         cfg["no_parallel"] = True
     if args.sub == "start":
         driver = args.driver or cfg.get("driver", "agent-tool")
@@ -143,6 +143,19 @@ def cmd_run(args):
         act = machine.start(root, args.task, cfg, lite=args.lite, driver=driver)
         if act.get("action") != "error":
             act = _resolve(root, S.current_run_id(root), cfg, act)
+        _out(act)
+        sys.exit(_exit_for(act))
+    if args.sub == "review-only":
+        act = machine.start_review_only(root, cfg, base=args.base, task=args.task)
+        if act.get("action") != "error":
+            driver = args.driver or cfg.get("driver", "agent-tool")
+            if driver in ("headless", "fake"):
+                from . import drivers
+                if driver == "fake" and not os.environ.get("HS_CLAUDE"):
+                    os.environ["HS_CLAUDE"] = os.path.join(machine.PLUGIN_ROOT, "evals", "fake_claude.py")
+                act = drivers.drive_existing(root, S.current_run_id(root), cfg)
+            else:
+                act = _resolve(root, S.current_run_id(root), cfg, act)
         _out(act)
         sys.exit(_exit_for(act))
     _out({"action": "error", "message": "unknown run subcommand"})
@@ -426,6 +439,10 @@ def main(argv=None):
     rst.add_argument("--no-parallel", action="store_true")
     rst.add_argument("--no-isolate", action="store_true", help="headless: run in the working tree instead of a worktree")
     rst.add_argument("--driver", choices=["agent-tool", "headless", "fake"])
+    rro = rs.add_parser("review-only", help="review the diff vs --base (default: merge-base with main) without architect/implement/test agents")
+    rro.add_argument("--base")
+    rro.add_argument("--task", help="one-line description for the reviewer")
+    rro.add_argument("--driver", choices=["agent-tool", "headless", "fake"])
     r.set_defaults(fn=cmd_run)
 
     an = sub.add_parser("answer")
