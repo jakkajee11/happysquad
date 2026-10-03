@@ -176,7 +176,12 @@ def run_gates(root, rdir, phase_dir, cfg):
     if phase == "IMPLEMENT":
         result.update(gate_build(root, rdir, phase_dir, out, cfg))
     elif phase == "TEST":
-        files = list((st.get("ws_impl_files") or {}).get(ws or "-", []))
+        # single-mode runs key impl files by the lone workstream's name; the tester's out.json says null
+        wif = st.get("ws_impl_files") or {}
+        if ws:
+            files = list(wif.get(ws, []))
+        else:
+            files = sorted({f for lst in wif.values() for f in lst})
         result.update(gate_test(root, rdir, phase_dir, out, cfg, files, st.get("base_ref"), rule))
     elif phase == "CONFLICT":
         result.update(gate_integration(root, rdir, phase_dir, cfg))

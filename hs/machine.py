@@ -531,7 +531,7 @@ def _consume(root, rdir, st, cfg, p, out):
         if out.get("ownership_gap") or out.get("design_conflict"):
             return _route_architect_from_impl(root, rdir, st, cfg, out, name)
         st["impl_phase_dirs"].append(p["phase_dir"])
-        key = p.get("ws") or "-"
+        key = p.get("ws") or name  # single mode: key by the lone workstream's name
         st.setdefault("ws_impl_files", {}).setdefault(key, [])
         st["ws_impl_files"][key] = sorted(set(st["ws_impl_files"][key]) | set(out.get("files", [])))
         if st["mode"] == "single":
@@ -557,7 +557,7 @@ def _consume(root, rdir, st, cfg, p, out):
         S.atomic_write_json(os.path.join(pd, "agent-out.json"), out)
         S.atomic_write_json(os.path.join(pd, "out.json"), {"phase": "FIX", "agent": p["agent"], "workstream": None})
         if p["agent"] == "implementer":
-            key = "-"
+            key = st["workstreams"][0]["name"] if len(st["workstreams"]) == 1 else "fix"
             st["ws_impl_files"].setdefault(key, [])
             st["ws_impl_files"][key] = sorted(set(st["ws_impl_files"][key]) | set(out.get("files", [])))
         if p["agent"] == "tester":
