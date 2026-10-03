@@ -182,4 +182,7 @@ json.dump(s, open(os.path.join(out, "summary.json"), "w"), indent=2)
 print("SUMMARY", json.dumps({k: s.get(k) for k in ("task", "engine", "state", "iterations", "dispatches", "asks", "destructive", "cost_usd", "turns", "secs", "oracle", "coverage")}))
 PY
 
+# keep the run's own artefacts (events, prompts, out.json, claude logs) next to the summary for post-mortems
+if [ -d "$WT/.happysquad/runs" ]; then cp -R "$WT/.happysquad/runs" "$OUT/runs" 2>/dev/null || true; fi
+if [ -f "$WT/.happysquad/state.json" ]; then cp "$WT/.happysquad/state.json" "$OUT/state-0.16.json" 2>/dev/null || true; fi
 if [ "$KEEP" = 1 ]; then echo "kept: $WT"; else git -C "$PLUGIN" worktree remove --force "$WT" >/dev/null 2>&1 || rm -rf "$WT"; fi

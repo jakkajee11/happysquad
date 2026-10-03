@@ -32,6 +32,11 @@ Baseline (0.16.2) and v1.0 results are appended below as they are collected.
 | B3 | 0.16.2 | COMPLETE | 2 | 5 | 0 | 0 | 0 | 6.26 | pass (cov 24.3%, 1089s) |
 | B4 | 0.16.2 | COMPLETE (after harness kill + resume) | 2 | 8 | 0 | 1 | 0 | 3.29 + unknown first segment | pass (cov 22.5%, 1997s resume segment) |
 | B5 | 0.16.2 | COMPLETE | 1 | 4 | 0 | 0 | 0 | 3.91 | pass (cov 21.2%, 667s) |
+| B1 | hs 1.0 headless | COMPLETE | 1 | 5 | 0 | 0 | 0 | 0.77 | pass (oracle cov 13.14%, 475s) |
+| B2 | hs 1.0 headless | COMPLETE | 1 | 4 | 0 | 0 | 0 | 0.92 | pass (oracle cov 16.13%, 463s) |
+| B3 | hs 1.0 headless | COMPLETE | 1 | 4 | 0 | 0 | 0 | 0.36 | pass (oracle cov 12.75%, 202s) |
+| B4 | hs 1.0 headless | COMPLETE | 1 | 4 | 0 | 0 | 0 | 0.63 | pass (oracle cov 13.46%, 467s) (+PROGRESS.md: 0.16 Stop hook nag, see notes) |
+| B5 | hs 1.0 headless | COMPLETE | 1 | 5 | 0 | 0 | 0 | 0.62 | pass (oracle cov 12.71%, 232s) |
 
 Baseline notes (0.16.2, sonnet on every agent, cap 3, threshold 50, all five launched in parallel 2026-10-02 18:25 UTC):
 
@@ -43,5 +48,21 @@ Baseline notes (0.16.2, sonnet on every agent, cap 3, threshold 50, all five lau
 - **Cost:** measured $23.84 across five runs, plus B4's unmeasured first segment (estimate $4–5 from its 682 stream lines, similar to B1/B2). Call it ≈ $28, almost double the ~$15 in spec §18.2. B3's extra iteration, B4's architecter round plus resume, and B2's wider diff account for it.
 
 - **0.16 coverage gate not enforced (inferred).** Config set `coverage_threshold: 50`; 0.16's reviewer rules gate per-file coverage of touched files. Before B1, `hs/cli.py` was at 0% (230 executable lines); B1 raised total hits by 30 lines, so cli.py ended ≤ 13% even if every new hit landed there. B2 (cli.py + config.py, both 0% before) is the same shape. All five PASSed. Verdict-side coverage enforcement is exactly what v1.0 moves into code (`G-COV` synthetic blocker) — and at threshold 50 per-file, B1/B2/B5 will be hard for hs unless the tester lifts those files substantially. Decide the P2 threshold (or switch to a per-file *delta* rule) before the v1.0 side runs.
+
+**hs 1.0 (headless driver, sonnet on every agent, cap 3, coverage rule delta, in-place, 2026-10-03, engine 9ce4b16):**
+
+- 5/5 COMPLETE at iteration 1, 22 dispatches total, 0 asks, 0 manual resumes, 0 agent errors, 0 heals, oracle 5/5 pass.
+- **Cost: $3.30 total ($0.36–$0.92 per task) vs $23.84+ for 0.16.2** — about 7× cheaper per COMPLETE. The headless driver spends no orchestrator LLM turns; every dollar goes to the four agents.
+- **Wall clock: 202–475 s per task** vs 667–1997 s for 0.16.2.
+- **Unrequested file change (1):** B4 also wrote `PROGRESS.md`. Cause: the bench loads the plugin with `--plugin-dir`, so the 0.16 `stop-sync-check.sh` Stop hook still runs inside the child and nags the agent to journal; `HS_CHILD=1` silences only the v1 `hs hook` command. Not scope creep by the squad; fix in P3 by making the 0.16 hook honour `HS_CHILD` (or by removing it). Counted as 1 destructive/unrequested edit for honesty; it is outside `owned` and the conflict gate would refuse it in parallel mode.
+- **Coverage figures are not comparable across engines:** the oracle's whole-package percent fell from ~21–26% to ~13–16% because the engine grew from 1,408 to ~2,370 executable lines between the baseline and this run (same hit count). The v1.0 gate uses the delta rule (added lines only), which every task passed.
+- **Two engine bugs found by this bench and fixed before the runs counted:** snapshot failing when the repo's own `.gitignore` ignores `.happysquad/` (586a17a); an in-iteration architect re-run reusing the phase dir (fb056b9).
+
+**Seeded-bug recall (evals/bench/recall.sh, sonnet, same planted diff):** 0.16.2 reviewer 3/3 caught (+1 extra SEC cross-reference), $0.35, 33 turns. hs reviewer: see row below when run.
+
+| reviewer | B-A | B-B | B-C | recall | cost |
+|---|---|---|---|---|---|
+| 0.16.2 `agents/reviewer.md` | caught | caught | caught | 3/3 | $0.35 |
+| hs `agents/hs-reviewer.md` | pending | pending | pending | pending | pending |
 
 **Baseline summary for the P2 dogfood gate (spec §1.2):** false COMPLETE 0/5 · manual resumes 1/5 (B4, harness-caused) · destructive 0/5 · BLOCKED 0/5 · recall: 1 scope-creep miss (B2) · $/COMPLETE ≈ $5.6 measured.
