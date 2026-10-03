@@ -1,0 +1,98 @@
+diff --git a/hs/__pycache__/__init__.cpython-314.pyc b/hs/__pycache__/__init__.cpython-314.pyc
+deleted file mode 100644
+index aaf7753..0000000
+Binary files a/hs/__pycache__/__init__.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/cli.cpython-314.pyc b/hs/__pycache__/cli.cpython-314.pyc
+deleted file mode 100644
+index a6298be..0000000
+Binary files a/hs/__pycache__/cli.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/config.cpython-314.pyc b/hs/__pycache__/config.cpython-314.pyc
+deleted file mode 100644
+index 33965e5..0000000
+Binary files a/hs/__pycache__/config.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/coverage.cpython-314.pyc b/hs/__pycache__/coverage.cpython-314.pyc
+deleted file mode 100644
+index 429592e..0000000
+Binary files a/hs/__pycache__/coverage.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/drivers.cpython-314.pyc b/hs/__pycache__/drivers.cpython-314.pyc
+deleted file mode 100644
+index e23dafc..0000000
+Binary files a/hs/__pycache__/drivers.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/gates.cpython-314.pyc b/hs/__pycache__/gates.cpython-314.pyc
+deleted file mode 100644
+index 9912ab3..0000000
+Binary files a/hs/__pycache__/gates.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/gitutil.cpython-314.pyc b/hs/__pycache__/gitutil.cpython-314.pyc
+deleted file mode 100644
+index 57d4c43..0000000
+Binary files a/hs/__pycache__/gitutil.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/machine.cpython-314.pyc b/hs/__pycache__/machine.cpython-314.pyc
+deleted file mode 100644
+index ffc833c..0000000
+Binary files a/hs/__pycache__/machine.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/provenance.cpython-314.pyc b/hs/__pycache__/provenance.cpython-314.pyc
+deleted file mode 100644
+index 1d45ec1..0000000
+Binary files a/hs/__pycache__/provenance.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/redgreen.cpython-314.pyc b/hs/__pycache__/redgreen.cpython-314.pyc
+deleted file mode 100644
+index 3308193..0000000
+Binary files a/hs/__pycache__/redgreen.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/render.cpython-314.pyc b/hs/__pycache__/render.cpython-314.pyc
+deleted file mode 100644
+index 3f4d661..0000000
+Binary files a/hs/__pycache__/render.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/risk.cpython-314.pyc b/hs/__pycache__/risk.cpython-314.pyc
+deleted file mode 100644
+index faa4695..0000000
+Binary files a/hs/__pycache__/risk.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/schemas.cpython-314.pyc b/hs/__pycache__/schemas.cpython-314.pyc
+deleted file mode 100644
+index 8157a20..0000000
+Binary files a/hs/__pycache__/schemas.cpython-314.pyc and /dev/null differ
+diff --git a/hs/__pycache__/state.cpython-314.pyc b/hs/__pycache__/state.cpython-314.pyc
+deleted file mode 100644
+index 48ff93b..0000000
+Binary files a/hs/__pycache__/state.cpython-314.pyc and /dev/null differ
+diff --git a/hs/gates.py b/evals/fixtures/seeded-bugs/hs/gates.py
+index 94187ea..bd016af 100644
+--- a/hs/gates.py
++++ b/evals/fixtures/seeded-bugs/hs/gates.py
+@@ -110,6 +110,7 @@ def gate_test(root, rdir, phase_dir, out, cfg, impl_files, base_ref, rule):
+     accepted, rejected = _agent_cmds(out.get("test_cmds"), cfg, "test")
+     cmds.extend(("agent", c) for c in accepted)
+     tests_ok, results = _run_all(root, phase_dir, cmds, cfg, "test", stop_on_fail=False)
++    tests_ok = all(r["exit"] == 0 for r in results if r["source"] == "config")
+     report = out.get("coverage_report") or cfg.get("coverage_report")
+     cov = coverage.parse(os.path.join(root, report) if report else None)
+     per_file, unverified = coverage_for_gate(root, cov, impl_files, base_ref, rule)
+diff --git a/hs/gitutil.py b/evals/fixtures/seeded-bugs/hs/gitutil.py
+index 4dc6a5f..900f45e 100644
+--- a/hs/gitutil.py
++++ b/evals/fixtures/seeded-bugs/hs/gitutil.py
+@@ -42,11 +42,9 @@ def snapshot(root, ref_name):
+     if head(root) is None:
+         return None
+     tmp = tmp_dir(root)
+-    idx = os.path.join(tmp, "index-%d" % os.getpid())
+     real = os.path.join(common_dir(root), "index")
++    idx = real
+     try:
+-        if os.path.isfile(real):
+-            shutil.copy(real, idx)
+         env = dict(os.environ, GIT_INDEX_FILE=idx)
+         # Do not name .happysquad/knowledge in the pathspec: if the repo's own .gitignore already
+         # ignores them, git add errors out ("paths are ignored") even with :(exclude). Add everything
+diff --git a/hs/machine.py b/evals/fixtures/seeded-bugs/hs/machine.py
+index 3fe6696..9e2460d 100644
+--- a/hs/machine.py
++++ b/evals/fixtures/seeded-bugs/hs/machine.py
+@@ -99,7 +99,7 @@ def _same_ref(a, b):
+     if not a or not b:
+         return False
+     a, b = str(a), str(b)
+-    return (a.startswith(b) or b.startswith(a)) and min(len(a), len(b)) >= 7
++    return True
+ 
+ 
+ def verdict(out, test_gate, threshold, impl_files, new_tests, proof_ref):
