@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- `hs redgreen` on PHP/Composer repos read every test as `green`. `vendor/` was symlinked into the old-ref worktree, and Composer's autoloader derives the project root from `dirname(vendor/)` via `__DIR__`, which PHP resolves through the symlink to the live tree — so `App\` loaded the changed code and the old ref never ran. `vendor/` is now copied (`shutil.copytree(symlinks=True)`, ~2 s for 62 MB); `node_modules`, `.venv` and `.env.testing` are still linked. Found on ev-management ticket 47, where the tester had to work around it with `--link`/`--cmd`.
+
 ## 1.1.0 — 2026-10-03
 
 ### Added

@@ -13,6 +13,10 @@ COMPILE_RE = re.compile(
     r"Cannot find module|does not provide an export|ModuleNotFoundError|cannot find symbol|error TS\d+|"
     r"SyntaxError|ImportError|undefined reference|package .* is not in|ERR_MODULE_NOT_FOUND")
 DEFAULT_LINKS = ("node_modules", "vendor", ".venv", ".env.testing")
+# Copied, not symlinked: Composer's autoloader computes the project root as dirname(vendor/) from
+# __DIR__, which PHP resolves through a symlink to the *live* tree — `App\\` then loads the changed
+# code and the old ref never runs (every PHP test reads green). A real copy keeps the root inside wt.
+COPY_DIRS = ("vendor",)
 
 
 def classify(code, text):
@@ -48,7 +52,10 @@ def prove(root, ref, tests, cmd_tpl, copy=(), link=(), timeout=600, mkdirs=()):
             src = os.path.join(root, rel)
             dst = os.path.join(wt, rel)
             if os.path.exists(src) and not os.path.lexists(dst):
-                os.symlink(os.path.abspath(src), dst)
+                if rel in COPY_DIRS and os.path.isdir(src):
+                    shutil.copytree(src, dst, symlinks=True)
+                else:
+                    os.symlink(os.path.abspath(src), dst)
         for rel in mkdirs:
             if rel:
                 os.makedirs(os.path.join(wt, rel), exist_ok=True)

@@ -273,6 +273,53 @@ class RedGreen(unittest.TestCase):
         self.assertIn("worktree add failed", res["rows"][0]["evidence"])
 
 
+@unittest.skipUnless(shutil.which("php"), "php not installed")
+class RedGreenComposerVendor(unittest.TestCase):
+    """vendor/ symlinked into the old-ref worktree resolves Composer's project root through the
+    symlink target — `App\\` autoloads the *live* tree's app/, the old ref never runs, and a test that
+    pins new behaviour comes back green (ev-management ticket 47, 2026-10-05)."""
+
+    AUTOLOAD = (
+        "<?php\n"
+        "// Composer's shape: project root = dirname(dirname(__DIR__)) of vendor/composer\n"
+        "spl_autoload_register(function ($c) {\n"
+        "    $base = dirname(dirname(__DIR__));\n"
+        "    if (strpos($c, 'App\\\\') === 0) { require $base . '/app/' . substr($c, 4) . '.php'; }\n"
+        "});\n"
+    )
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="hs-composer-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        for d in ("app", "tests", "vendor/composer"):
+            os.makedirs(os.path.join(self.root, d))
+        self._write(".gitignore", "vendor/\n")
+        self._write("vendor/composer/autoload_real.php", self.AUTOLOAD)
+        self._write("vendor/autoload.php", "<?php require __DIR__ . '/composer/autoload_real.php';\n")
+        self._write("app/Calc.php", "<?php namespace App; class Calc { static function v() { return 1; } }\n")
+        _git(self.root, "init", "-q")
+        _commit_all(self.root, "init")
+        self.ref = _git(self.root, "rev-parse", "HEAD").strip()
+        # the change under test: live tree now returns 2, the test pins 2 — must be red at self.ref
+        self._write("app/Calc.php", "<?php namespace App; class Calc { static function v() { return 2; } }\n")
+        self._write("tests/calc_test.php",
+                    "<?php require __DIR__ . '/../vendor/autoload.php';\n"
+                    "exit(\\App\\Calc::v() === 2 ? 0 : 1);\n")
+
+    def _write(self, rel, content):
+        with open(os.path.join(self.root, rel), "w") as f:
+            f.write(content)
+
+    def test_old_ref_runs_the_old_code_not_the_live_tree(self):
+        res = redgreen.prove(self.root, self.ref, ["tests/calc_test.php"], "php {file}")
+        self.assertEqual(res["rows"][0]["kind"], "assertion",
+                         "vendor/ must not resolve App\\ to the live tree: " + res["rows"][0].get("evidence", ""))
+
+    def test_live_vendor_is_untouched_and_worktree_removed(self):
+        redgreen.prove(self.root, self.ref, ["tests/calc_test.php"], "php {file}")
+        self.assertTrue(os.path.isfile(os.path.join(self.root, "vendor/composer/autoload_real.php")))
+        self.assertEqual(len(_git(self.root, "worktree", "list").splitlines()), 1)
+
 class Classify(unittest.TestCase):
     def test_exit0_is_green(self):
         self.assertEqual(redgreen.classify(0, "anything"), "green")
