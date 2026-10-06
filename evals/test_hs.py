@@ -107,6 +107,16 @@ class Provenance(unittest.TestCase):
         self.bad("npm run evil")
         self.bad("npm install")
 
+    def test_default_flags_accept_a_phpunit_filtered_verify(self):
+        """The chief reviewer writes `phpunit --fail-on-empty-test-suite --filter X` so a filter that
+        matches nothing exits 1 instead of a green 0. Rejecting that flag marks every such verify
+        `untrusted`, so a fixed blocker never clears and the loop re-routes to the cap (ev-management ticket 51)."""
+        from hs import config
+        cfg = ["php ./vendor/bin/phpunit"]
+        good, why = provenance.classify("php ./vendor/bin/phpunit --fail-on-empty-test-suite --filter testX",
+                                        cfg, config.DEFAULTS["allowed_flags"], for_verify=True)
+        self.assertTrue(good, why)
+
     def test_unknown_flag_rejected(self):
         self.assertIn("allowed_flags", self.bad("npm test --exec=x"))
 

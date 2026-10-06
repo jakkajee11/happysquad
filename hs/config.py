@@ -30,7 +30,10 @@ DEFAULTS = {
     "test_cmd": None,
     "coverage_report": None,
     "redgreen_cmd": None,  # template with {file}; default "<test_cmd> {file}"
-    "allowed_flags": ["--run", "--filter", "--grep", "-t", "-k", "--testNamePattern", "--coverage"],
+    # --fail-on-empty-test-suite: phpunit exits 1 when --filter matches nothing — a verify the reviewer
+    # writes with it must stay trusted, or a fixed blocker reads "untrusted" and re-routes forever
+    "allowed_flags": ["--run", "--filter", "--grep", "-t", "-k", "--testNamePattern", "--coverage",
+                      "--fail-on-empty-test-suite"],
     "generated": ["**/pnpm-lock.yaml", "**/package-lock.json", "**/yarn.lock", "**/__snapshots__/**"],
     "headless": {
         "budget_per_phase": 2.0,
