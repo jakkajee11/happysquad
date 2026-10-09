@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.1 — 2026-10-09
 
 ### Fixed
 - Review scope: an untracked file that existed before the run (already in the base snapshot) counted as changed. `changed_files` listed every untracked file, so a user's scratch file reached risk routing, coverage, the parallel ownership gate ("unowned") and the reviewer, while the prompt's `git diff <base>` showed it as deleted. `changed_files` now diffs the base against a tree of the working tree, and the review/specialist prompts give that same diff (`git diff <base> <tree>`) plus the file list.
