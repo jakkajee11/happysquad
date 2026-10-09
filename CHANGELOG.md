@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- `hs run review-only` got a `G-RED-NONE` major on every run: its synthetic TEST phase declared `new_tests: []` even when the diff added tests. Test files the diff adds (absent at base) are now its new tests and are proven red at base like a tester's (`redgreen.json` in the TEST phase dir), so the verdict applies the same red-first rule as the dev loop — a new test that passes against the old code is a `G-RED` blocker.
+- `--base` is pinned to a sha at start. A symbolic ref (`HEAD~1`) failed `_same_ref` against the redgreen ref and produced a `G-RED` "ref mismatch HEAD~1 != HEAD~1"; an unknown ref is now an error up front.
+- review-only `feedback.md` is headed "Review findings (review-only: reported, not routed)" instead of "Feedback for iteration 2 (target: implementer)".
+- Prompt templates drop a line holding only an unset `{{*_note}}` variable instead of rendering `(none)`. The review prompt's delta paragraph is now `{{delta_note}}`, so first-round reviews no longer carry delta instructions; the architect's `{{lite_note}}` no longer prints `(none)` on non-lite runs.
+
 ## 1.1.2 — 2026-10-09
 
 ### Fixed

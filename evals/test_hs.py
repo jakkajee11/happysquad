@@ -292,6 +292,10 @@ class Render(unittest.TestCase):
         self.assertEqual(render.render_text("{{l}}", {"l": ["p", "q"]}), "- p\n- q")
         self.assertEqual(render.render_text("{{l}}", {"l": []}), "(none)")
 
+    def test_unset_note_line_is_dropped(self):
+        self.assertEqual(render.render_text("a\n{{x_note}}\nb {{y}}\n", {}), "a\nb (none)\n")
+        self.assertEqual(render.render_text("a\n{{x_note}}\nb\n", {"x_note": "N"}), "a\nN\nb\n")
+
 
 if __name__ == "__main__":
     unittest.main()

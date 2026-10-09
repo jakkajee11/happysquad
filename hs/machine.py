@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 
-from . import gates, gitutil, render, risk as R, schemas, state as S
+from . import gates, gitutil, redgreen, render, risk as R, schemas, state as S
 
 AGENT_FOR = {"ARCHITECT": "architecter", "IMPLEMENT": "implementer", "TEST": "tester", "REVIEW": "reviewer",
              "SPECIALIST": "specialist"}
@@ -220,6 +220,12 @@ def start_review_only(root, cfg, base=None, task=None):
     gitutil.prune(root)
     if not base:
         base = _default_base(root)
+    # pin a symbolic --base (HEAD~1, main) to its sha: refs are compared as shas (_same_ref), and a
+    # commit made mid-run must not move the base under the gates
+    sha = subprocess.run(["git", "rev-parse", "--verify", "%s^{commit}" % base], cwd=root, capture_output=True, text=True)
+    if base and sha.returncode != 0:
+        return {"action": "error", "message": "unknown --base ref: %s" % base}
+    base = sha.stdout.strip() or base
     changed = gitutil.changed_files(root, base)
     if not changed:
         return {"action": "error", "message": "nothing to review: no changes vs %s" % (base or "HEAD")}
@@ -250,12 +256,21 @@ def start_review_only(root, cfg, base=None, task=None):
         S.atomic_write(os.path.join(rdir, "design.md"),
                        "# Review-only run\n\nNo design: the diff vs `%s` is reviewed as-is.\n\nChanged files:\n%s\n"
                        % (base, "\n".join("- " + f for f in changed)))
-        # synthetic TEST phase: the gate runs the configured suite + coverage over the diff; no tester agent
+        # synthetic TEST phase: the gate runs the configured suite + coverage over the diff; no tester agent.
+        # Test files the diff adds (absent at base) are its new tests and get the same red→green proof
+        # at base a tester's would, so the verdict's red-first term judges them instead of G-RED-NONE.
         pd = os.path.join(rdir, phase_dir_name("TEST", 1))
         os.makedirs(os.path.join(pd, "logs"), exist_ok=True)
+        new_tests = [t for t in tests if os.path.isfile(os.path.join(root, t)) and not _exists_at(root, base, t)]
+        if new_tests:
+            rep = cfg.get("coverage_report")
+            S.atomic_write_json(os.path.join(pd, "redgreen.json"), redgreen.prove(
+                root, base, new_tests, cfg.get("redgreen_cmd") or cfg["test_cmd"] + " {file}",
+                timeout=cfg["gate_timeout"], mkdirs=[os.path.dirname(rep)] if rep else ()))
         S.atomic_write_json(os.path.join(pd, "out.json"),
                             {"phase": "TEST", "workstream": None, "test_cmds": [], "coverage_report": None,
-                             "test_files": tests, "new_tests": [], "ac_map": {}, "untestable": [], "redgreen": None, "findings": []})
+                             "test_files": tests, "new_tests": new_tests, "ac_map": {}, "untestable": [],
+                             "redgreen": "redgreen.json" if new_tests else None, "findings": []})
         st["test_phase_dirs"].append(os.path.relpath(pd, root))
         S.commit(rdir, st, "run.start", data={"base_ref": base, "review_only": True, "files": len(changed)})
         _spawn_gates(root, rdir, st, pd, phase="TEST")
@@ -263,6 +278,9 @@ def start_review_only(root, cfg, base=None, task=None):
         S.set_current(root, run_id)
     return next_action(root, run_id, cfg)
 
+
+def _exists_at(root, ref, path):
+    return bool(ref) and subprocess.run(["git", "cat-file", "-e", "%s:%s" % (ref, path)], cwd=root, capture_output=True).returncode == 0
 
 def _default_base(root):
     for cand in ("origin/main", "origin/master", "main", "master"):
@@ -343,8 +361,12 @@ def _vars(root, st, cfg, spec):
         v["tree_ref"] = gitutil.worktree_tree(root)
         v["changed_files"] = gitutil.changed_files(root, st.get("base_ref"), v["tree_ref"])
         if st.get("delta") and st.get("iter_ref"):
-            v["fix_diff"] = "git diff %s %s -- . ':(exclude).happysquad'" % (st["iter_ref"], v["tree_ref"])
-            v["fix_files"] = gitutil.changed_files(root, st["iter_ref"], v["tree_ref"])
+            fix_files = gitutil.changed_files(root, st["iter_ref"], v["tree_ref"])
+            v["delta_note"] = ("Mode `delta`: an inner fix pass just ran and every blocker's verify command passed. "
+                               "The fix pass's own diff is `git diff %s %s -- . ':(exclude).happysquad'`, touching: %s. "
+                               "Confirm each previously-flagged blocker first-hand at its file:line, scan those files for "
+                               "regressions, keep your verdicts on untouched axes, and list confirmed ids in `confirmed_fixes`. "
+                               "Do not re-derive the whole review." % (st["iter_ref"], v["tree_ref"], ", ".join(fix_files) or "no files"))
     if st.get("review_phase_dirs"):
         prev = S.read_json(os.path.join(root, st["review_phase_dirs"][-1], "out.json")) or {}
         rows = ["| id | severity | tag | file:line | desc |", "|---|---|---|---|---|"]
@@ -1153,7 +1175,9 @@ def _after_review(root, rdir, st, cfg, out, pd):
 
 
 def _write_feedback(rdir, st, blockers, majors, route):
-    fb = ["# Feedback for iteration %d  (target: %s)\n" % (st["iteration"] + 1, route), "## Blockers",
+    head = ("# Review findings  (review-only: reported, not routed)\n" if st.get("review_only")
+            else "# Feedback for iteration %d  (target: %s)\n" % (st["iteration"] + 1, route))
+    fb = [head, "## Blockers",
           "| id | tag | file:line | desc | verify |", "|---|---|---|---|---|"]
     for b in blockers:
         fb.append("| %s | %s | %s:%s | %s | `%s` |" % (b["id"], b["tag"], b.get("file"), b.get("line"), b["desc"], b.get("verify")))

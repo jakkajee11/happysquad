@@ -88,6 +88,25 @@ class ReviewOnly(unittest.TestCase):
         gate = json.load(open(os.path.join(self.w, ".happysquad", "runs", rid, "gates-TEST-i1.json")))
         self.assertEqual(gate["tests"], "pass")
         self.assertIn("src/calc.js", gate["coverage"]["per_file"])
+        # the diff's new test file is proven red at base like a tester's would be: no G-RED-NONE
+        self.assertEqual([(r["test"], r["kind"]) for r in gate["redgreen"]["rows"]], [("test/mul.test.js", "compile")])
+        v = json.load(open(os.path.join(self.w, r["report"].replace("review.md", "verdict.json"))))
+        self.assertNotIn("G-RED-NONE", [m["id"] for m in v["majors"]])
+        prompt = open(os.path.join(self.w, ".happysquad", "runs", rid, "prompts", "REVIEW-i1.md")).read()
+        self.assertNotIn("Mode `delta`", prompt)
+        self.assertNotIn("(none)\n\n## Output", prompt)
+
+    def test_new_test_green_at_base_is_a_red_first_blocker(self):
+        # a "new" test that passes against the old code proves nothing about the change
+        with open(os.path.join(self.w, "test", "add2.test.js"), "w") as f:
+            f.write('import { test } from "node:test";\nimport assert from "node:assert/strict";\n'
+                    'import { add } from "../src/calc.js";\ntest("add2", () => { assert.equal(add(1, 1), 2); });\n')
+        r = _hs(self.w, "run", "review-only", "--driver", "fake")
+        self.assertEqual(r["verdict"], "FAIL", r)
+        v = json.load(open(os.path.join(self.w, r["report"].replace("review.md", "verdict.json"))))
+        self.assertIn("G-RED", [b["id"] for b in v["blockers"]])
+        fb = open(os.path.join(self.w, r["feedback"])).read()
+        self.assertTrue(fb.startswith("# Review findings  (review-only"), fb[:80])
 
     def test_blocker_gives_fail_verdict_and_feedback_without_routing(self):
         _add_mul(self.w)
