@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.3 — 2026-10-09
 
 ### Fixed
 - `hs run review-only` got a `G-RED-NONE` major on every run: its synthetic TEST phase declared `new_tests: []` even when the diff added tests. Test files the diff adds (absent at base) are now its new tests and are proven red at base like a tester's (`redgreen.json` in the TEST phase dir), so the verdict applies the same red-first rule as the dev loop — a new test that passes against the old code is a `G-RED` blocker.
