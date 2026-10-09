@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.2 — 2026-10-09
 
 ### Fixed
 - `G-TESTS` is judged against the base ref. When the suite fails, the gate runs it once more at `base_ref` in a throwaway worktree (cached as `runs/<id>/baseline-tests.json`) and compares failing-test lines. If every failure at head also fails at base, `tests` is `pre-existing`: a `G-TESTS-PRE` major instead of a blocker, the TEST gate doesn't re-dispatch, and the integration gate doesn't send a parallel run back to the architect. A new failure, a green or unrunnable base, an agent test command failing, a timeout, or output with no recognisable failure lines all keep the blocker; `G-TESTS` now names the new failures. Found on a toy repo whose `sub()` was broken at base: every run, review-only included, failed on a defect the diff never touched.
