@@ -330,6 +330,13 @@ def _vars(root, st, cfg, spec):
         v["axis_checklist"] = os.path.join(PLUGIN_ROOT, "references", "axis-%s.md" % spec["axis"])
         rk = st.get("risk") or {}
         v["risk_matches"] = ["%s (%s: %s)" % (m["file"], m["kind"], m["pattern"]) for m in rk.get("matches", []) if m["axis"] == spec["axis"]] or None
+    if spec["phase"] in ("REVIEW", "SPECIALIST"):
+        # diff against a tree of the working tree, not the index: new files show, pre-existing untracked ones don't show as deleted
+        v["tree_ref"] = gitutil.worktree_tree(root)
+        v["changed_files"] = gitutil.changed_files(root, st.get("base_ref"), v["tree_ref"])
+        if st.get("delta") and st.get("iter_ref"):
+            v["fix_diff"] = "git diff %s %s -- . ':(exclude).happysquad'" % (st["iter_ref"], v["tree_ref"])
+            v["fix_files"] = gitutil.changed_files(root, st["iter_ref"], v["tree_ref"])
     if st.get("review_phase_dirs"):
         prev = S.read_json(os.path.join(root, st["review_phase_dirs"][-1], "out.json")) or {}
         rows = ["| id | severity | tag | file:line | desc |", "|---|---|---|---|---|"]

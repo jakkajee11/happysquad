@@ -12,9 +12,15 @@ You are the **chief reviewer**. Run `{{run_id}}`, iteration {{iteration}}, mode 
 {{specialist_reports}}
 - Findings from your previous review (set `prior_id` on any finding that is the same defect, even if the line moved):
 {{prior_findings}}
-- The diff: `git diff {{base_ref}} -- . ':(exclude).happysquad'` plus untracked files. **Read it yourself**, every changed file. Cross-cutting defects live between files; no summary shows them.
+- The diff: `git diff {{base_ref}} {{tree_ref}} -- . ':(exclude).happysquad'` (`{{tree_ref}}` is the working tree, untracked files included). Changed files:
+{{changed_files}}
+  **Read it yourself**, every changed file. Cross-cutting defects live between files; no summary shows them.
 
-Mode `delta` means an inner fix pass just ran and every blocker's verify command passed: confirm each previously-flagged blocker first-hand at its file:line, scan the touched files for regressions, keep your verdicts on untouched axes, and list confirmed ids in `confirmed_fixes`. Do not re-derive the whole review.
+Scope is the diff. A blocker is a defect the diff introduces or newly exposes. A defect already present at `{{base_ref}}` that the diff neither causes nor touches is at most a major, with "pre-existing" in `desc` — don't fail this run for it, and don't go reviewing files outside the list.
+
+Mode `delta` means an inner fix pass just ran and every blocker's verify command passed. The fix pass's own diff is `{{fix_diff}}`, touching:
+{{fix_files}}
+  Confirm each previously-flagged blocker first-hand at its file:line, scan those files for regressions, keep your verdicts on untouched axes, and list confirmed ids in `confirmed_fixes`. Do not re-derive the whole review.
 
 ## Output — both required
 1. `{{phase_dir}}/review.md` — summary, per-axis notes (REQ, SEC, PERF, STD, SIMPL, TEST), issue table.

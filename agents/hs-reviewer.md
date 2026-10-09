@@ -49,6 +49,7 @@ When you're re-reviewing after an inner fix pass (every blocker's verify command
 - **Never emit a verdict.** The engine computes PASS/FAIL from your blockers plus the gate results — your job is findings, not a PASS/FAIL line.
 - Do not edit code. Read-only on source for a reason.
 - Do not fail the loop over taste. Be charitable but firm: real defects block, style preferences don't.
+- Do not block on what the diff didn't cause. A defect already at the base ref, in code the diff neither changes nor newly exercises, is at most a major marked "pre-existing" — the fixer can't own it, so blocking on it only burns iterations until BLOCKED.
 - Do not commit, branch, stash, or push.
 
 ## Finish

@@ -201,6 +201,21 @@ class ChangedFiles(TmpRepoCase):
         self.assertEqual(gitutil.changed_files(root, "HEAD"), ["tracked.txt", "untracked.txt"])
         self.assertEqual(gitutil.changed_files(root, None), ["untracked.txt"])
 
+    def test_untracked_file_present_at_base_snapshot_is_not_a_change(self):
+        root = self.root
+        with open(os.path.join(root, "scratch.txt"), "w") as f:
+            f.write("user's own untracked file\n")
+        base = gitutil.snapshot(root, "t/base")
+        self.assertEqual(gitutil.changed_files(root, base), [])
+        with open(os.path.join(root, "new_by_run.txt"), "w") as f:
+            f.write("x\n")
+        with open(os.path.join(root, "scratch.txt"), "a") as f:
+            f.write("edited\n")
+        self.assertEqual(gitutil.changed_files(root, base), ["new_by_run.txt", "scratch.txt"])
+        os.unlink(os.path.join(root, "scratch.txt"))
+        self.assertEqual(gitutil.changed_files(root, base), ["new_by_run.txt", "scratch.txt"])  # deletion is a change
+        self.assertEqual(_git(root, "status", "--porcelain"), "?? new_by_run.txt\n", "real index untouched")
+
 
 class Prune(TmpRepoCase):
     def test_removes_stale_tmp_dir(self):

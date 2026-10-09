@@ -33,14 +33,11 @@ def tmp_dir(root):
     return d
 
 
-def snapshot(root, ref_name):
-    """Pin the working tree (tracked + untracked, honouring .gitignore) at refs/happysquad/<ref_name>.
+def worktree_tree(root):
+    """Tree sha of the working tree (tracked + untracked, honouring .gitignore, minus .happysquad/knowledge).
 
     Uses a temp index copied from the real one so the real index is never touched.
-    Returns the commit sha, or None when the repo has no commits.
     """
-    if head(root) is None:
-        return None
     tmp = tmp_dir(root)
     idx = os.path.join(tmp, "index-%d" % os.getpid())
     real = os.path.join(common_dir(root), "index")
@@ -53,15 +50,23 @@ def snapshot(root, ref_name):
         # the ignore rules allow, then drop the two dirs from the temp index explicitly.
         git(root, "add", "-A", "--", ".", env=env)
         git(root, "rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ".happysquad", "knowledge", env=env)
-        tree = git(root, "write-tree", env=env).strip()
-        sha = git(root, "commit-tree", tree, "-p", "HEAD", "-m", "happysquad snapshot %s" % ref_name).strip()
-        git(root, "update-ref", "refs/happysquad/%s" % ref_name, sha)
-        return sha
+        return git(root, "write-tree", env=env).strip()
     finally:
         try:
             os.unlink(idx)
         except OSError:
             pass
+
+def snapshot(root, ref_name):
+    """Pin the working tree (see worktree_tree) at refs/happysquad/<ref_name>.
+
+    Returns the commit sha, or None when the repo has no commits.
+    """
+    if head(root) is None:
+        return None
+    sha = git(root, "commit-tree", worktree_tree(root), "-p", "HEAD", "-m", "happysquad snapshot %s" % ref_name).strip()
+    git(root, "update-ref", "refs/happysquad/%s" % ref_name, sha)
+    return sha
 
 
 def delete_refs(root, prefix):
@@ -70,15 +75,17 @@ def delete_refs(root, prefix):
         git(root, "update-ref", "-d", ref, check=False)
 
 
-def changed_files(root, base_ref):
-    """Tracked changes vs base_ref plus untracked, both excluding .happysquad and knowledge."""
-    files = set()
+def changed_files(root, base_ref, tree=None):
+    """Files that differ between base_ref and the working tree, untracked included, excluding .happysquad and knowledge.
+
+    Compares against worktree_tree, not `git diff base_ref` + `ls-files --others`: an untracked file
+    that already existed when base_ref was snapshotted is in base_ref and is not a change.
+    """
     if base_ref:
-        out = git(root, "diff", "--name-only", base_ref, "--", ".", *EXCLUDE, check=False)
-        files.update(l for l in out.splitlines() if l)
-    out = git(root, "ls-files", "--others", "--exclude-standard", "--", ".", *EXCLUDE, check=False)
-    files.update(l for l in out.splitlines() if l)
-    return sorted(files)
+        out = git(root, "diff", "--name-only", base_ref, tree or worktree_tree(root), "--", ".", *EXCLUDE, check=False)
+    else:
+        out = git(root, "ls-files", "--others", "--exclude-standard", "--", ".", *EXCLUDE, check=False)
+    return sorted(l for l in out.splitlines() if l)
 
 
 def prune(root):

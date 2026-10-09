@@ -9,7 +9,9 @@ Read `{{axis_checklist}}` and apply it to the diff.
 ## Inputs
 - Design: `{{design_path}}`
 - Risk matches that triggered you: {{risk_matches}}
-- The diff: `git diff {{base_ref}} -- . ':(exclude).happysquad'` plus untracked files. Read every changed file on a flagged path.
+- The diff: `git diff {{base_ref}} {{tree_ref}} -- . ':(exclude).happysquad'` (`{{tree_ref}}` is the working tree, untracked files included). Changed files:
+{{changed_files}}
+  Read every changed file on a flagged path. A defect already present at `{{base_ref}}` that the diff neither causes nor touches is at most a major, marked "pre-existing".
 
 ## Output — both required
 1. `{{phase_dir}}/{{axis}}.md` — summary, findings table with file:line and mechanism, out-of-scope notes (one line each, for other axes).
