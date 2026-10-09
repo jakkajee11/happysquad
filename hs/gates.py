@@ -81,17 +81,25 @@ def added_line_numbers(root, base_ref, path):
     return "all"
 
 
+# ponytail: extension list — coverage tools never instrument these, so "no per-line data" is expected,
+# not unverified. An unlisted non-code type still reads G-COV-UNVERIFIED; add it here.
+NOT_CODE = (".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc", ".json", ".yaml", ".yml", ".toml", ".ini",
+            ".cfg", ".lock", ".csv", ".sql", ".html", ".css", ".scss", ".svg", ".png", ".jpg", ".jpeg", ".gif",
+            ".webp", ".ico", ".pdf", ".gitignore")
+
 def coverage_for_gate(root, cov, files, base_ref, rule):
-    """per_file values the verdict gates on, plus the list of files the rule could not verify."""
+    """per_file values the verdict gates on, plus the list of files the rule could not verify.
+
+    Docs/data/assets and files the change deleted have nothing to cover and are left out entirely.
+    """
     if cov.get("status") != "ok":
         return {}, []
+    files = [f for f in files if not f.lower().endswith(NOT_CODE) and os.path.isfile(os.path.join(root, f))]
     if rule == "file":
         pf = coverage.per_file_for(cov, files, root)
         return pf, [f for f, v in pf.items() if v is None]
-    added = {}
-    for f in files:
-        a = added_line_numbers(root, base_ref, f)
-        added[f] = a if a == "all" else a
+    added = {f: added_line_numbers(root, base_ref, f) for f in files}
+    files = [f for f in files if added[f]]  # a change that only deletes lines adds nothing to cover
     # delta_for wants sets for diffs and the literal "all" for new files; map "all" to every executable line
     lines = cov.get("lines") or {}
     norm = {}

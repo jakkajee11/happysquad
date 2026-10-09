@@ -287,6 +287,34 @@ class RedGreen(unittest.TestCase):
         self.assertEqual(res["rows"][0]["kind"], "not-runnable")
         self.assertIn("worktree add failed", res["rows"][0]["evidence"])
 
+class CoverageForGate(TmpRepoCase):
+    """Docs, deleted files and deletion-only edits have nothing to cover: never G-COV-UNVERIFIED."""
+
+    def test_non_code_deleted_and_deletion_only_files_are_skipped(self):
+        root = self.root
+        for rel, body in (("src/a.js", "x\ny\nz\n"), ("src/gone.js", "g\n"), ("src/trim.js", "1\n2\n3\n")):
+            os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+            with open(os.path.join(root, rel), "w") as f:
+                f.write(body)
+        _commit_all(root, "code")
+        base = _git(root, "rev-parse", "HEAD").strip()
+        with open(os.path.join(root, "src/a.js"), "a") as f:
+            f.write("w\n")
+        with open(os.path.join(root, "src/trim.js"), "w") as f:
+            f.write("1\n2\n")
+        with open(os.path.join(root, "src/untested.js"), "w") as f:
+            f.write("u\n")
+        os.unlink(os.path.join(root, "src/gone.js"))
+        with open(os.path.join(root, "NOTES.md"), "w") as f:
+            f.write("# notes\n")
+        cov = {"status": "ok", "total": 50.0, "per_file": {"src/a.js": 100.0}, "lines": {"src/a.js": {4: 1}}}
+        files = ["NOTES.md", "src/a.js", "src/gone.js", "src/trim.js", "src/untested.js"]
+        pf, unv = gates.coverage_for_gate(root, cov, files, base, "delta")
+        self.assertEqual(pf, {"src/a.js": 100.0, "src/untested.js": None})
+        self.assertEqual(unv, ["src/untested.js"], "a code file with no per-line data is still unverified")
+        pf, unv = gates.coverage_for_gate(root, cov, files, base, "file")
+        self.assertEqual(sorted(pf), ["src/a.js", "src/trim.js", "src/untested.js"])
+
 class SuiteBaseline(TmpRepoCase):
     """G-TESTS vs base: a failure already present at base_ref is `pre-existing`, a new one stays `fail`."""
     CFG = {"test_cmd": "npm test", "gate_timeout": 120, "coverage_report": "coverage/lcov.info"}

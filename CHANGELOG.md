@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- `G-COV-UNVERIFIED` no longer fires for files that have nothing to cover. The coverage gate skips docs/data/assets (`gates.NOT_CODE`: `.md`, `.json`, `.yaml`, images, …), files the change deleted, and (delta rule) files whose diff only removes lines. Found reviewing smarthome S32 with `review-only`: the ticket's `issues/*.md` edits made every such commit carry a "coverage unverifiable" major. A code file with no per-line data is still unverified.
+
 ## 1.1.3 — 2026-10-09
 
 ### Fixed
