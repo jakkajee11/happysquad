@@ -9,7 +9,7 @@ import os
 import re
 import subprocess
 
-from . import coverage, provenance, state as S
+from . import coverage, provenance, redgreen, state as S
 
 # gate subprocesses see HS_GATE=1 so a fixture can behave differently under the gate than under an agent
 GATE_ENV = dict(os.environ, HS_GATE="1")
@@ -105,11 +105,45 @@ def coverage_for_gate(root, cov, files, base_ref, rule):
     return pf, [f for f, v in pf.items() if v is None]
 
 
+def _baseline(root, rdir, cfg, base_ref):
+    """The full suite's result at base_ref, run once per run and cached in the run dir."""
+    path = os.path.join(rdir, "baseline-tests.json")
+    bl = S.read_json(path)
+    if bl and bl.get("ref") == base_ref:
+        return bl
+    rep = cfg.get("coverage_report")
+    bl = redgreen.baseline(root, base_ref, cfg["test_cmd"], cfg["gate_timeout"],
+                           mkdirs=[os.path.dirname(rep)] if rep else (), env=GATE_ENV)
+    S.atomic_write_json(path, bl)
+    return bl
+
+def suite_status(root, rdir, cfg, base_ref, results):
+    """tests: pass | fail | pre-existing, for a list of test-command results.
+
+    pre-existing = only the config suite failed, it fails at base_ref too, and every failing-test line
+    at head also fails there. Anything unknown (agent command failed, timeout, no recognisable failure
+    lines, base green or unrunnable) stays `fail`, so a real regression is never waved through.
+    """
+    bad = [r for r in results if r["exit"] != 0]
+    if not bad:
+        return {"tests": "pass"}
+    if any(r["source"] != "config" or r["exit"] == -9 for r in bad) or not base_ref:
+        return {"tests": "fail"}
+    with open(os.path.join(root, bad[0]["log"])) as f:
+        head = redgreen.failure_lines(f.read())
+    bl = _baseline(root, rdir, cfg, base_ref)
+    new = sorted(head - set(bl["failures"]))
+    pre = bool(head) and not new and bl["exit"] not in (0, None, -9)
+    return {"tests": "pre-existing" if pre else "fail", "tests_new": new,
+            "tests_pre": sorted(head & set(bl["failures"])), "baseline": {"ref": bl["ref"], "exit": bl["exit"]}}
+
 def gate_test(root, rdir, phase_dir, out, cfg, impl_files, base_ref, rule):
     cmds = [("config", cfg["test_cmd"])] if cfg.get("test_cmd") else []
     accepted, rejected = _agent_cmds(out.get("test_cmds"), cfg, "test")
     cmds.extend(("agent", c) for c in accepted)
-    tests_ok, results = _run_all(root, phase_dir, cmds, cfg, "test", stop_on_fail=False)
+    _, results = _run_all(root, phase_dir, cmds, cfg, "test", stop_on_fail=False)
+    ts = suite_status(root, rdir, cfg, base_ref, results)
+    tests_ok = ts["tests"] != "fail"
     report = out.get("coverage_report") or cfg.get("coverage_report")
     cov = coverage.parse(os.path.join(root, report) if report else None)
     per_file, unverified = coverage_for_gate(root, cov, impl_files, base_ref, rule)
@@ -119,20 +153,25 @@ def gate_test(root, rdir, phase_dir, out, cfg, impl_files, base_ref, rule):
         if os.path.isfile(cand):
             rg = S.read_json(cand)
             break
-    return {"gate": "test", "ok": tests_ok, "tests": "pass" if tests_ok else "fail", "cmds": results,
-            "coverage": {"status": cov["status"], "total": cov["total"], "per_file": per_file,
-                         "unverified": unverified, "rule": rule, "report": report},
-            "redgreen": rg, "untrusted": [{"cmd": c, "reason": r} for c, r in rejected]}
+    return dict(ts, gate="test", ok=tests_ok, cmds=results,
+                coverage={"status": cov["status"], "total": cov["total"], "per_file": per_file,
+                          "unverified": unverified, "rule": rule, "report": report},
+                redgreen=rg, untrusted=[{"cmd": c, "reason": r} for c, r in rejected])
 
 
-def gate_integration(root, rdir, phase_dir, cfg):
+def gate_integration(root, rdir, phase_dir, cfg, base_ref):
     cmds = []
     if cfg.get("build_cmd"):
         cmds.append(("config", cfg["build_cmd"]))
     if cfg.get("test_cmd"):
         cmds.append(("config", cfg["test_cmd"]))
     ok, results = _run_all(root, phase_dir, cmds, cfg, "integration")
-    return {"gate": "integration", "ok": ok, "cmds": results}
+    res = {"gate": "integration", "ok": ok, "cmds": results}
+    if not ok and len(results) == len(cmds) and cfg.get("test_cmd"):
+        # build passed, only the suite failed: pre-existing failures must not send the run back to the architect
+        res.update(suite_status(root, rdir, cfg, base_ref, results[-1:]))
+        res["ok"] = res["tests"] == "pre-existing"
+    return res
 
 
 def gate_verify(root, phase_dir, verifies, cfg):
@@ -188,7 +227,7 @@ def run_gates(root, rdir, phase_dir, cfg):
             files = sorted({f for lst in wif.values() for f in lst})
         result.update(gate_test(root, rdir, phase_dir, out, cfg, files, st.get("base_ref"), rule))
     elif phase == "CONFLICT":
-        result.update(gate_integration(root, rdir, phase_dir, cfg))
+        result.update(gate_integration(root, rdir, phase_dir, cfg, st.get("base_ref")))
     elif phase == "FIX":
         verifies = st.get("inner_verify") or {}
         result["verify"] = gate_verify(root, phase_dir, verifies, cfg)
@@ -201,7 +240,8 @@ def run_gates(root, rdir, phase_dir, cfg):
         b = gate_build(root, rdir, phase_dir, {"build_cmds": fix_out.get("build_cmds")}, cfg)
         t = gate_test(root, rdir, phase_dir, fix_out if fix_out.get("phase") == "TEST" else {}, cfg,
                       sorted(set(files)), st.get("base_ref"), rule)
-        result.update({"gate": "fix", "build": b, "test": t, "tests": t["tests"], "coverage": t["coverage"],
+        result.update({"gate": "fix", "build": b, "test": t, "tests": t["tests"], "tests_new": t.get("tests_new"),
+                       "tests_pre": t.get("tests_pre"), "coverage": t["coverage"],
                        "redgreen": t["redgreen"], "cmds": b["cmds"] + t["cmds"],
                        "ok": b["ok"] and all(v in ("pass", "manual") for v in result["verify"].values())})
     else:

@@ -14,7 +14,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from hs import gitutil, redgreen, state  # noqa: E402
+from hs import gates, gitutil, redgreen, state  # noqa: E402
 
 TOY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "toy-repo")
 
@@ -286,6 +286,70 @@ class RedGreen(unittest.TestCase):
         res = redgreen.prove(self.root, "not-a-real-ref", ["test/calc.test.js"], self.CMD)
         self.assertEqual(res["rows"][0]["kind"], "not-runnable")
         self.assertIn("worktree add failed", res["rows"][0]["evidence"])
+
+class SuiteBaseline(TmpRepoCase):
+    """G-TESTS vs base: a failure already present at base_ref is `pre-existing`, a new one stays `fail`."""
+    CFG = {"test_cmd": "npm test", "gate_timeout": 120, "coverage_report": "coverage/lcov.info"}
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="hs-bl-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        shutil.copytree(TOY, self.root, dirs_exist_ok=True)
+        os.makedirs(os.path.join(self.root, "coverage"), exist_ok=True)
+        self._sed("src/calc.js", "return a - b;", "return a + b;")  # pre-existing: sub() is broken at base
+        _git(self.root, "init", "-q")
+        _commit_all(self.root, "init")
+        self.base = _git(self.root, "rev-parse", "HEAD").strip()
+        self.rdir = tempfile.mkdtemp(prefix="hs-bl-run-")
+        self.addCleanup(shutil.rmtree, self.rdir, ignore_errors=True)
+        # gates.GATE_ENV is a snapshot taken at import; the toy's slowOnce() must see HS_TOY_FAST there
+        old = gates.GATE_ENV.get("HS_TOY_FAST")
+        gates.GATE_ENV["HS_TOY_FAST"] = "1"
+        self.addCleanup(lambda: gates.GATE_ENV.pop("HS_TOY_FAST", None) if old is None else gates.GATE_ENV.update(HS_TOY_FAST=old))
+
+    def _sed(self, rel, a, b):
+        p = os.path.join(self.root, rel)
+        with open(p) as f:
+            s = f.read()
+        self.assertIn(a, s)
+        with open(p, "w") as f:
+            f.write(s.replace(a, b))
+
+    def _gate(self):
+        pd = os.path.join(self.rdir, "TEST-i1")
+        os.makedirs(os.path.join(pd, "logs"), exist_ok=True)
+        return gates.gate_test(self.root, self.rdir, pd, {}, self.CFG, [], self.base, "delta")
+
+    def test_only_base_failures_is_pre_existing_and_cached(self):
+        with open(os.path.join(self.root, "src", "calc.js"), "a") as f:
+            f.write("\nexport function mul(a, b) {\n  return a * b;\n}\n")
+        g = self._gate()
+        self.assertEqual(g["tests"], "pre-existing", g.get("tests_new"))
+        self.assertTrue(g["ok"])
+        self.assertTrue(any("sub" in l for l in g["tests_pre"]), g["tests_pre"])
+        bl = state.read_json(os.path.join(self.rdir, "baseline-tests.json"))
+        self.assertEqual((bl["ref"], bl["exit"] != 0), (self.base, True))
+        self.assertEqual(len(_git(self.root, "worktree", "list").splitlines()), 1, "baseline worktree removed")
+
+    def test_new_failure_alongside_base_failure_is_fail(self):
+        self._sed("src/calc.js", "return a + b;\n}\n\nexport function sub", "return a - b;\n}\n\nexport function sub")
+        g = self._gate()
+        self.assertEqual(g["tests"], "fail")
+        self.assertTrue(any("add" in l for l in g["tests_new"]), g["tests_new"])
+
+    def test_green_base_keeps_fail(self):
+        self._sed("src/calc.js", "return a + b;\n}\n\nexport function sub", "return a - b;\n}\n\nexport function sub")
+        self._sed("src/calc.js", "export function sub(a, b) {\n  return a + b;", "export function sub(a, b) {\n  return a - b;")
+        _commit_all(self.root, "fix sub, break add")
+        self.base = _git(self.root, "rev-parse", "HEAD~1").strip()  # base still has the broken sub
+        self._sed("src/calc.js", "export function sub(a, b) {\n  return a - b;", "export function sub(a, b) {\n  return a + b;")
+        self.assertEqual(self._gate()["tests"], "fail")  # head fails add+sub, base only sub → add is new
+
+    def test_failure_lines_normalise_durations(self):
+        a = redgreen.failure_lines("✖ sub (0.709084ms)\nok 1 - add\nnot ok 3 - sub\n✖ failing tests:\n")
+        b = redgreen.failure_lines("✖ sub (12.1ms)\nnot ok 7 - sub\n")
+        self.assertEqual(a, b)
+        self.assertEqual(redgreen.failure_lines("all good\n"), set())
 
 
 @unittest.skipUnless(shutil.which("php"), "php not installed")

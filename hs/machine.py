@@ -116,8 +116,14 @@ def verdict(out, test_gate, threshold, impl_files, new_tests, proof_ref):
         (blockers if sev == "blocker" else majors if sev == "major" else []).append(f)
     tg = test_gate or {}
     if tg.get("tests") == "fail":
-        blockers.append({"id": "G-TESTS", "severity": "blocker", "tag": "REQ", "file": None, "desc": "full test suite fails",
+        new = tg.get("tests_new")
+        blockers.append({"id": "G-TESTS", "severity": "blocker", "tag": "REQ", "file": None,
+                         "desc": "full test suite fails" + (" (new vs base: %s)" % "; ".join(new[:5]) if new else ""),
                          "route": "implementer", "verify": "manual", "source": "gate"})
+    elif tg.get("tests") == "pre-existing":
+        majors.append({"id": "G-TESTS-PRE", "severity": "major", "tag": "REQ", "file": None,
+                       "desc": "suite fails, but only with failures already present at the base ref: %s" % "; ".join((tg.get("tests_pre") or [])[:5]),
+                       "route": "implementer", "verify": "manual", "source": "gate"})
     cov = tg.get("coverage") or {}
     if threshold is not None:
         if cov.get("status") == "ok":
@@ -326,6 +332,8 @@ def _vars(root, st, cfg, spec):
         cov = tg.get("coverage") or {}
         v["gates_summary"] = "tests=%s coverage_rule=%s coverage_status=%s total=%s per_file=%s unverified=%s" % (
             tg.get("tests"), cov.get("rule"), cov.get("status"), cov.get("total"), cov.get("per_file"), cov.get("unverified"))
+        if tg.get("tests_pre"):
+            v["gates_summary"] += " failing_at_base_too=%s" % tg["tests_pre"][:10]
     if spec.get("axis"):
         v["axis_checklist"] = os.path.join(PLUGIN_ROOT, "references", "axis-%s.md" % spec["axis"])
         rk = st.get("risk") or {}
@@ -943,8 +951,11 @@ def _merge_test_gate(st, result):
     rg = result.get("redgreen") or {}
     for r in rg.get("rows") or []:
         rows[r["test"]] = r
-    tests = "fail" if ("fail" in (prev.get("tests"), result.get("tests"))) else "pass"
+    both = (prev.get("tests"), result.get("tests"))
+    tests = next((t for t in ("fail", "pre-existing") if t in both), "pass")
     st["last_test_gate"] = {"iteration": st["iteration"], "tests": tests, "coverage": cov,
+                            "tests_new": sorted(set(prev.get("tests_new") or []) | set(result.get("tests_new") or [])),
+                            "tests_pre": sorted(set(prev.get("tests_pre") or []) | set(result.get("tests_pre") or [])),
                             "redgreen": {"ref": rg.get("ref") or (prev.get("redgreen") or {}).get("ref"), "rows": list(rows.values())}}
     st["verified_coverage"] = cov.get("total")
 

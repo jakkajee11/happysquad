@@ -306,7 +306,7 @@ schema ฝังใน hs เป็น dict เดียว ใช้ทั้�
 
 | term | PASS เมื่อ | ไม่งั้น |
 |---|---|---|
-| tests | `config.test_cmd` (full suite) exit 0 | REQ blocker → implementer, `verify = config.test_cmd` |
+| tests | `config.test_cmd` (full suite) exit 0; หรือ `pre-existing` (เพิ่มหลัง 1.1.1): fail แต่ทุกบรรทัด failure ที่ head fail ที่ `base_ref` ด้วย (รัน suite ที่ base ครั้งเดียว cache ใน `baseline-tests.json`) → `G-TESTS-PRE` major | REQ blocker → implementer, `verify = config.test_cmd`; desc ระบุ failure ใหม่เทียบ base |
 | coverage | per-file ของ `IMPLEMENT.files` ≥ threshold (inclusive); `coverage_threshold: null` → ข้าม term | ต่ำกว่า → TEST blocker → tester; status `unsupported` (ไม่มี parser) → ข้าม term + TEST major; status `unparseable` → gate fail, re-dispatch tester |
 | redgreen | ทุกแถวของ `new_tests` มี, `ref == proof_ref`, ไม่มีแถว `green` | TEST blocker → tester |
 | `new_tests` ว่าง | อนุญาต (Q1 ปิด: refactor/docs/config COMPLETE ได้) | TEST major "no red-first proof"; reviewer ยกเป็น blocker ได้เมื่อ diff เปลี่ยน behaviour |

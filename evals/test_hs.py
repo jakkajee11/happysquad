@@ -214,6 +214,13 @@ class Verdict(unittest.TestCase):
         self.assertEqual((b, r), ([], None))
         self.assertEqual(m, [])
 
+    def test_pre_existing_failures_are_a_major_not_a_blocker(self):
+        g = dict(self.gate(tests="pre-existing"), tests_pre=["✖ sub"])
+        b, m, _ = machine.verdict({"findings": []}, g, 80, ["src/a.js"], ["t/a.js"], self.REF)
+        self.assertEqual(b, [])
+        self.assertEqual([x["id"] for x in m], ["G-TESTS-PRE"])
+        self.assertIn("✖ sub", m[0]["desc"])
+
     def test_tests_fail_is_synthetic_blocker(self):
         b, _, r = machine.verdict({"findings": []}, self.gate(tests="fail"), 80, ["src/a.js"], ["t/a.js"], self.REF)
         self.assertEqual([x["id"] for x in b], ["G-TESTS"])
