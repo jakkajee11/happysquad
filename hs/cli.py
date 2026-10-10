@@ -125,6 +125,14 @@ def cmd_config(args):
     _out(C.load(_root(args)))
 
 
+def _design_text(root, args):
+    """--design <ticket file> → its text (the task stays the task line), or None."""
+    if not getattr(args, "design", None):
+        return None
+    p = args.design if os.path.isabs(args.design) else os.path.join(root, args.design)
+    with open(p) as f:
+        return f.read()
+
 def cmd_run(args):
     root = _root(args)
     cfg = C.load(root)
@@ -137,10 +145,10 @@ def cmd_run(args):
             if driver == "fake" and not os.environ.get("HS_CLAUDE"):
                 os.environ["HS_CLAUDE"] = os.path.join(machine.PLUGIN_ROOT, "evals", "fake_claude.py")
             iso = "none" if args.no_isolate else None
-            act = drivers.run_headless(root, args.task, cfg, lite=args.lite, isolate_wt=iso)
+            act = drivers.run_headless(root, args.task, cfg, lite=args.lite, isolate_wt=iso, design=_design_text(root, args))
             _out(act)
             sys.exit(_exit_for(act))
-        act = machine.start(root, args.task, cfg, lite=args.lite, driver=driver)
+        act = machine.start(root, args.task, cfg, lite=args.lite, driver=driver, design=_design_text(root, args))
         if act.get("action") != "error":
             act = _resolve(root, S.current_run_id(root), cfg, act)
         _out(act)
@@ -481,6 +489,7 @@ def main(argv=None):
     rst.add_argument("--no-parallel", action="store_true")
     rst.add_argument("--no-isolate", action="store_true", help="headless: run in the working tree instead of a worktree")
     rst.add_argument("--driver", choices=["agent-tool", "headless", "fake"])
+    rst.add_argument("--design", help="ticket file with a ```hs-design JSON block (ac/owned/test_owned): skips the architect when complete")
     rro = rs.add_parser("review-only", help="review the diff vs --base (default: merge-base with main) without architect/implement/test agents")
     rro.add_argument("--base")
     rro.add_argument("--task", help="one-line description for the reviewer")

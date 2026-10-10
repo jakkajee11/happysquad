@@ -75,6 +75,33 @@ class SchemaShape(unittest.TestCase):
             json.loads(schemas.render(ph))
 
 
+class DesignFromTicket(unittest.TestCase):
+    BLOCK = '```hs-design\n%s\n```'
+
+    def t(self, body):
+        return "ticket prose\n\n" + self.BLOCK % body
+
+    def test_valid_block(self):
+        out, errs = machine.design_from_ticket(self.t(json.dumps(
+            {"ac": [{"id": "AC-1", "text": "x"}, {"id": "AC-2", "text": "docs"}], "owned": ["a.js"],
+             "test_owned": ["t/a.test.js"], "untestable": [{"ac": "AC-2", "reason": "docs only"}]})))
+        self.assertEqual(errs, [])
+        self.assertEqual(out["size"], "S")
+        self.assertEqual(out["workstreams"][0]["ac"], ["AC-1"], "an untestable AC is not a workstream AC")
+        self.assertEqual(schemas.check("ARCHITECT", out), [])
+
+    def test_unusable_blocks_name_the_reason(self):
+        cases = {"no block here": "no ```hs-design block",
+                 self.t("{not json"): "not valid JSON",
+                 self.t('{"ac": [{"id": "AC-1", "text": "x"}], "owned": [], "test_owned": ["t"]}'): "owned is empty",
+                 self.t('{"ac": [{"id": "AC-1", "text": "x"}], "owned": ["a"], "test_owned": []}'): "test_owned is empty",
+                 self.t('{"ac": [], "owned": ["a"], "test_owned": ["t"], "files": []}'): "unknown key",
+                 self.t('{"ac": [{"id": "AC-1"}], "owned": ["a"], "test_owned": ["t"]}'): "missing key 'text'"}
+        for text, want in cases.items():
+            out, errs = machine.design_from_ticket(text)
+            self.assertIsNone(out, text)
+            self.assertTrue(any(want in e for e in errs), (want, errs))
+
 class SchemaSemantics(unittest.TestCase):
     def test_overlap_rejected(self):
         o = _arch(workstreams=[{"name": "a", "owned": ["src/**"], "depends_on": [], "ac": ["AC-1"]},

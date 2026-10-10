@@ -193,7 +193,8 @@ def verdict(out, test_gate, threshold, impl_files, new_tests, proof_ref):
 
 # --- run lifecycle -----------------------------------------------------------
 
-def start(root, task, cfg, lite=False, driver=None):
+def start(root, task, cfg, lite=False, driver=None, design=None):
+    """`design`: ticket text; a complete ```hs-design block in it skips ARCHITECT (see design_from_ticket)."""
     if not gitutil.is_repo(root):
         return {"action": "error", "message": "not a git repository"}
     if not cfg.get("test_cmd"):
@@ -224,7 +225,75 @@ def start(root, task, cfg, lite=False, driver=None):
         S.atomic_write(os.path.join(rdir, "task.md"), task + "\n")
         S.commit(rdir, st, "run.start", data={"base_ref": base, "lite": bool(lite)})
         S.set_current(root, run_id)
+        # pumpapp passes the whole ticket as the task: a block in the task counts as --design
+        if design is None and "```hs-design" in task:
+            design = task
+        if design is not None:
+            _start_from_design(root, rdir, st, cfg, design)
     return next_action(root, run_id, cfg)
+
+
+_DESIGN_BLOCK = re.compile(r"```hs-design\s*\n(.*?)\n```", re.S)
+
+def design_from_ticket(text):
+    """The ```hs-design fenced JSON block in a ticket → (ARCHITECT-shaped out, errors).
+
+    Block keys: ac [{id,text}], owned [paths/globs], test_owned [globs], optional untestable,
+    needs_human, size. One workstream; size defaults to S/M from the owned count (lite still uses
+    the 1.1.7 small-by-numbers rule). The result is checked with the ARCHITECT schema.
+    """
+    m = _DESIGN_BLOCK.search(text or "")
+    if not m:
+        return None, ["no ```hs-design block in the ticket"]
+    try:
+        b = json.loads(m.group(1))
+    except ValueError as e:
+        return None, ["hs-design block is not valid JSON: %s" % e]
+    if not isinstance(b, dict):
+        return None, ["hs-design block must be a JSON object"]
+    unknown = sorted(set(b) - {"ac", "owned", "test_owned", "untestable", "needs_human", "size"})
+    if unknown:
+        return None, ["hs-design: unknown key(s) %s" % unknown]
+    ac = b.get("ac") or []
+    owned = b.get("owned") or []
+    out = {"phase": "ARCHITECT", "design": "design.md",
+           "size": b.get("size") or ("S" if len(owned) <= 3 else "M"),
+           "ac": ac,
+           "workstreams": [{"name": "main", "owned": owned, "depends_on": [],
+                            "ac": [a.get("id") for a in ac if isinstance(a, dict)
+                                   and a.get("id") not in {u.get("ac") for u in b.get("untestable") or [] if isinstance(u, dict)}]}],
+           "test_owned": {"main": b.get("test_owned") or []}}
+    for k in ("untestable", "needs_human"):
+        if b.get(k):
+            out[k] = b[k]
+    errs = schemas.check("ARCHITECT", out)
+    if not errs and not owned:
+        errs = ["hs-design: owned is empty"]
+    if not errs and not out["test_owned"]["main"] and any(a["id"] in out["workstreams"][0]["ac"] for a in ac):
+        errs = ["hs-design: test_owned is empty but some AC need tests"]
+    return (out if not errs else None), errs
+
+def _start_from_design(root, rdir, st, cfg, ticket):
+    """Skip ARCHITECT when the ticket carries a complete hs-design block; otherwise fall back to the
+    architect with the reasons in feedback.md. The architect stays the fallback for ownership gaps,
+    design conflicts, reviewer route=architecter and convergence."""
+    out, errs = design_from_ticket(ticket)
+    if errs:
+        S.atomic_write(os.path.join(rdir, "feedback.md"),
+                       "# Feedback for architecter\n\n## The ticket's hs-design block was not usable\n%s\n\n"
+                       "Design from the ticket text instead.\n" % "\n".join("- " + e for e in errs))
+        S.append_event(rdir, "design", phase="ARCHITECT", iteration=st["iteration"],
+                       data={"source": "ticket", "ok": False, "errors": errs[:5]})
+        S.save_state(rdir, st)
+        return
+    pd = os.path.join(rdir, phase_dir_name("ARCHITECT", st["iteration"]))
+    os.makedirs(pd, exist_ok=True)
+    S.atomic_write(os.path.join(pd, "design.md"), ticket.rstrip() + "\n")
+    S.atomic_write_json(os.path.join(pd, "out.json"), out)
+    st["design_source"] = "ticket"
+    S.append_event(rdir, "design", phase="ARCHITECT", iteration=st["iteration"],
+                   data={"source": "ticket", "ok": True, "ac": len(out["ac"]), "owned": out["workstreams"][0]["owned"]})
+    _after_architect(root, rdir, st, cfg, out, pd)
 
 
 def start_review_only(root, cfg, base=None, task=None):

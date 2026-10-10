@@ -179,10 +179,10 @@ def drive_existing(root, rid, cfg):
     return _drive(root, rid, cfg, use_wt=False, branch=None)
 
 
-def run_headless(root, task, cfg, lite=False, max_parallel=None, isolate_wt=None):
+def run_headless(root, task, cfg, lite=False, max_parallel=None, isolate_wt=None, design=None):
     """Drive a whole run to done. Returns the final action dict."""
     use_wt = (isolate_wt if isolate_wt is not None else cfg.get("headless", {}).get("isolate", "worktree")) == "worktree"
-    act = machine.start(root, task, cfg, lite=lite, driver="headless")
+    act = machine.start(root, task, cfg, lite=lite, driver="headless", design=design)
     if act.get("action") == "error":
         return act
     rid = S.current_run_id(root)

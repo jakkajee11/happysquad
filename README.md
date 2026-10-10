@@ -58,6 +58,19 @@ Between phases, `hs` (not the LLM) checks:
 
 A FAIL where every blocker has a `verify` command takes the **inner fix loop** instead of a full round: fix → re-verify → gates → a delta review of just the fix (capped at `inner_cap` passes). **Convergence**: a blocker seen twice routes normally, a third time forces the architecter, and a repeat after that (or two rounds that fixed nothing) stops the run `BLOCKED cause=convergence`. A small design auto-enters the **lite path** — `size: S`, or one workstream owning ≤3 literal paths whatever the label: one workstream, no CONFLICT, iteration cap `lite.cap`. RISK still runs, so a small diff that touches auth or a migration still gets its specialist.
 
+**Design from the ticket.** When the design is settled before the loop (a design phase that writes tickets), `hs run start "<task>" --design <ticket.md>` skips the architect. The ticket carries a fenced block the engine reads and validates with the architect's schema:
+
+````markdown
+```hs-design
+{"ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}],
+ "owned": ["src/calc.js"],
+ "test_owned": ["test/mul.test.js"],
+ "needs_human": []}
+```
+````
+
+`ac`, `owned`, `test_owned` are required; `untestable`, `needs_human`, `size` are optional. A complete block starts the run at IMPLEMENT with the ticket as `design.md`; a missing or invalid block falls back to the architect, with the reasons in its feedback. A task text containing the block counts the same as `--design`. The architect stays the fallback later in the run: an implementer/tester ownership gap, a design conflict, a reviewer `route: architecter`, or convergence still dispatch it.
+
 `BLOCKED` causes the engine produces today: `validation` (out.json kept failing schema), `gate` (build/test kept failing), `convergence` (cap hit or a recurring blocker), `agent` (a headless `claude -p` dispatch errored twice with no output). Each writes `BLOCKED.md` with the iteration history and what was tried. (`test_cmd` missing is checked before a run even starts — it's reported as a plain error, not a BLOCKED run.)
 
 ## Drivers

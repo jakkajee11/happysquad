@@ -131,5 +131,45 @@ class ReviewOnly(unittest.TestCase):
         self.assertEqual(r["files_changed"], 2)
 
 
+@unittest.skipUnless(shutil.which("node") and shutil.which("git"), "needs node + git")
+class StartFromDesign(unittest.TestCase):
+    """--design: a complete hs-design block skips the architect; a broken one falls back to it."""
+
+    def setUp(self):
+        self.w = _toy_repo()
+
+    def tearDown(self):
+        shutil.rmtree(self.w, ignore_errors=True)
+
+    def _dispatched(self):
+        rid = open(os.path.join(self.w, ".happysquad", "current")).read().strip()
+        evs = [json.loads(l) for l in open(os.path.join(self.w, ".happysquad", "runs", rid, "events.jsonl")) if l.strip()]
+        return [e.get("phase") for e in evs if e["event"] == "dispatch"], evs
+
+    def test_complete_block_skips_architect(self):
+        ticket = os.path.join(ROOT, "evals", "fixtures", "tickets", "mul-design.md")
+        r = _hs(self.w, "run", "start", "add mul", "--driver", "fake", "--no-isolate", "--design", ticket)
+        self.assertEqual((r["action"], r["status"]), ("done", "COMPLETE"), r)
+        phases, evs = self._dispatched()
+        self.assertNotIn("ARCHITECT", phases)
+        self.assertEqual(phases[:2], ["IMPLEMENT", "TEST"])
+        self.assertTrue(any(e["event"] == "design" and e["data"].get("ok") for e in evs))
+
+    def test_block_in_the_task_text_counts(self):
+        task = open(os.path.join(ROOT, "evals", "fixtures", "tickets", "mul-design.md")).read()
+        r = _hs(self.w, "run", "start", task, "--driver", "fake", "--no-isolate")
+        self.assertEqual(r["status"], "COMPLETE", r)
+        self.assertNotIn("ARCHITECT", self._dispatched()[0])
+
+    def test_broken_block_falls_back_to_architect(self):
+        bad = os.path.join(self.w, "ticket.md")
+        with open(bad, "w") as f:
+            f.write('add mul\n\n```hs-design\n{"ac": [], "owned": []}\n```\n')
+        r = _hs(self.w, "run", "start", "add mul", "--driver", "fake", "--no-isolate", "--design", bad)
+        self.assertEqual(r["status"], "COMPLETE", r)
+        phases, evs = self._dispatched()
+        self.assertEqual(phases[0], "ARCHITECT")
+        self.assertTrue(any(e["event"] == "design" and e["data"].get("ok") is False for e in evs))
+
 if __name__ == "__main__":
     unittest.main()

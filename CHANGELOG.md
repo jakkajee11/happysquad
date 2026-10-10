@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.10 — 2026-10-10
+
+### Added
+- `hs run start --design <ticket.md>`: when the design is settled before the loop, a ticket's fenced ` ```hs-design ` JSON block (`ac`, `owned`, `test_owned`, optional `untestable` / `needs_human` / `size`) replaces the architect dispatch. The engine validates it with the ARCHITECT schema (plus non-empty `owned`, and `test_owned` whenever an AC needs a test), writes the ticket as `design.md`, and starts at IMPLEMENT; size/lite follow the 1.1.7 rules. A missing or invalid block falls back to the architect with the reasons in `feedback.md` — the run never fails on it. A task text containing the block counts as `--design` (pumpapp passes whole tickets as the task). The architect stays the in-run fallback for ownership gaps, design conflicts, reviewer `route: architecter` and convergence. A `design` event records which path was taken. In 39 real pumpapp runs only 15 tickets listed AC and none carried ownership, so the block is a ticket-template change on the caller's side before this saves an opus dispatch.
+
 ## 1.1.9 — 2026-10-10
 
 ### Added
