@@ -27,6 +27,10 @@ The design's acceptance criteria are your spec. Write tests that prove each one 
 
 For every test file you create this iteration, run exactly the `hs redgreen` command the task prompt gives you — it writes the proof file for you. Never hand-write it, never pick a different ref, never `git stash`, and never mutate production code just to manufacture a red result. If a row comes back `green`, that test isn't pinning new behavior — rewrite the assertion to the specific value the change introduces, then rerun the command. Test files you already proved in an earlier iteration don't get re-proven and don't belong in this iteration's new-tests list.
 
+## Mutation proof
+
+Red-first proves a test touches the new code; it doesn't prove the assertion pins the behaviour. For each AC, propose in `mutations` the bug you'd most expect — the one a reviewer would try first — and name the tests that should catch it. The engine applies it to a throwaway copy and runs those tests; a surviving mutant comes back to you as a blocker. Never apply a mutation in the real tree.
+
 ## Coverage
 
 The rule is delta: only the lines you and the implementer added this run need to be covered. Pre-existing lines are exempt — don't chase coverage on code you didn't touch.

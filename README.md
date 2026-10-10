@@ -51,7 +51,7 @@ Every agent writes an `out.json` (the phase's machine-checked contract) plus an 
 Between phases, `hs` (not the LLM) checks:
 
 - **Gate build** — `config.build_cmd` plus any agent-added commands that pass the provenance rules (full-prefix match against a config command, no shell metacharacters).
-- **Gate test** — `config.test_cmd`, coverage from the report (lcov / cobertura / istanbul / pytest-cov), and **red→green proof**: every new test is re-run in a throwaway worktree against the pre-fix ref and must have failed there first.
+- **Gate test** — `config.test_cmd`, coverage from the report (lcov / cobertura / istanbul / pytest-cov), and **red→green proof**: every new test is re-run in a throwaway worktree against the pre-fix ref and must have failed there first. Plus **mutation proof**: the tester names, per AC, the bug a reviewer would try first (`mutations`); the gate applies each to a throwaway copy of the change and the named tests must go red — a surviving mutant is a `G-MUT` blocker back to the tester. An AC only a person can confirm goes in the design's `needs_human`: the run still completes, with a `HUMAN-CHECK.md` checklist.
 - **Conflict gate** (parallel runs only) — every changed file belongs to exactly one workstream's ownership.
 - **Risk → specialists** — a regex pass over the diff (`references/risk-patterns.json`) decides whether `security`/`performance` specialists get dispatched alongside the chief reviewer.
 - **Verdict** — `hs` computes PASS/FAIL from a truth table over tests / coverage / redgreen / specialist findings / reviewer findings. The reviewer never emits a verdict, only findings with a `verify` command each.

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.9 — 2026-10-10
+
+### Added
+- **Mutation proof from the tester.** TEST `out.json` takes `mutations: [{ac, file, find, replace, tests}]` — per mapped AC, the bug a reviewer would try first. The test gate snapshots the change under test, applies each mutant to its own throwaway worktree (`find` must occur exactly once), and runs the named tests there; the live tree is never touched. `killed` is the proof; `survived` is a `G-MUT` blocker routed to the tester; `not-applied` is a `G-MUT-NOT-APPLIED` major; new tests with no mutations at all is a `G-MUT-NONE` major (refactor/docs runs with no new tests get nothing). Most real TEST blockers (26 of 39 chief blockers) were "the reviewer ran a mutation and the suite stayed green" — this moves that check before review. Results reach the reviewer in `gates_summary` (`mutants=[AC-1:killed, …]`).
+- **`needs_human` AC.** ARCHITECT `out.json` takes `needs_human: [{ac, reason, how}]` for an AC only a person can confirm (real-device render, a Builder-run harness). It is still built; the tester need not map it; the reviewer is told not to block on missing rendered/device evidence for it; the run COMPLETEs and `done` carries `needs_human` plus `human_check` → `HUMAN-CHECK.md`, a checklist with how to verify each. A caller must not ship until a person ticks it. Two real runs blocked `cause=permission` waiting on exactly this kind of evidence.
+
+### Fixed
+- Headless per-dispatch cost (1.1.8) was empty in real runs: the driver consumed an `out.json` as soon as it landed, while the agent was still finishing its turn — before `claude -p` printed the result line that carries `total_cost_usd`. The driver now consumes only after that agent has exited (still bounded by `agent_timeout`).
+- Prompt templates: `needs_human` guidance renders as an optional `{{needs_human_note}}` line, dropped when unset.
+
 ## 1.1.8 — 2026-10-10
 
 Unattended-run pass, from 60 real runs (all on the agent-tool driver; 13 checkpoints, 1 run stalled 60 min in ARCHITECT).

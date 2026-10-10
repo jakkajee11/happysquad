@@ -1,0 +1,16 @@
+{
+  "_expect": "COMPLETE",
+  "_note": "TEST-i1 writes a weak test (typeof mul === 'number') and proposes the mutant a*b → a+b. The engine applies it to a snapshot copy and runs the test: still green → G-MUT blocker (route tester, verify manual) → full round to TEST-i2, which falls to happy(): assert mul(3,4) === 12 and the same mutant, now killed → REVIEW-i2 clean → COMPLETE. The reviewer never had to find the weak test. Dispatches: ARCH, IMPL, TEST, REVIEW, TEST, REVIEW = 6.",
+  "TEST-i1": {
+    "out": {
+      "phase": "TEST", "workstream": null, "test_cmds": [], "coverage_report": null,
+      "test_files": ["test/mul.test.js"], "new_tests": ["test/mul.test.js"],
+      "ac_map": {"AC-1": ["test/mul.test.js::mul"]}, "findings": [], "redgreen": "redgreen.json",
+      "mutations": [{"ac": "AC-1", "file": "src/calc.js", "find": "return a * b;", "replace": "return a + b;", "tests": ["test/mul.test.js"]}]
+    },
+    "files": {
+      "test/mul.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { mul } from \"../src/calc.js\";\n\ntest(\"mul\", () => {\n  assert.equal(typeof mul(2, 3), \"number\");\n});\n"
+    },
+    "redgreen": {"rows": [{"test": "test/mul.test.js", "kind": "compile", "evidence": "SyntaxError: The requested module does not provide an export named 'mul'"}]}
+  }
+}

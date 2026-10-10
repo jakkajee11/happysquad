@@ -287,6 +287,40 @@ class RedGreen(unittest.TestCase):
         self.assertEqual(res["rows"][0]["kind"], "not-runnable")
         self.assertIn("worktree add failed", res["rows"][0]["evidence"])
 
+@unittest.skipUnless(shutil.which("node"), "node not installed")
+class Mutate(unittest.TestCase):
+    """redgreen.mutate: killed / survived / not-applied, each mutant on its own copy, live tree untouched."""
+    CMD = "node --test {file}"
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="hs-mut-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "src")); os.makedirs(os.path.join(self.root, "test"))
+        with open(os.path.join(self.root, "src", "m.js"), "w") as f:
+            f.write("export function mul(a, b) {\n  return a * b;\n}\n")
+        with open(os.path.join(self.root, "test", "strong.test.js"), "w") as f:
+            f.write('import { test } from "node:test";\nimport assert from "node:assert/strict";\n'
+                    'import { mul } from "../src/m.js";\ntest("m", () => { assert.equal(mul(3, 4), 12); });\n')
+        with open(os.path.join(self.root, "test", "weak.test.js"), "w") as f:
+            f.write('import { test } from "node:test";\nimport assert from "node:assert/strict";\n'
+                    'import { mul } from "../src/m.js";\ntest("m", () => { assert.equal(typeof mul(3, 4), "number"); });\n')
+        with open(os.path.join(self.root, "package.json"), "w") as f:
+            f.write('{"type": "module"}\n')
+        _git(self.root, "init", "-q")
+        _commit_all(self.root, "init")
+        self.ref = _git(self.root, "rev-parse", "HEAD").strip()
+
+    def test_kinds(self):
+        bug = {"ac": "AC-1", "file": "src/m.js", "find": "return a * b;", "replace": "return a + b;"}
+        res = redgreen.mutate(self.root, self.ref, [dict(bug, tests=["test/strong.test.js"]),
+                                                    dict(bug, tests=["test/weak.test.js"]),
+                                                    dict(bug, find="not in file", tests=["test/strong.test.js"]),
+                                                    dict(bug, tests=[])], self.CMD)
+        self.assertEqual([r["kind"] for r in res["rows"]], ["killed", "survived", "not-applied", "not-applied"])
+        with open(os.path.join(self.root, "src", "m.js")) as f:
+            self.assertIn("a * b", f.read(), "live tree never mutated")
+        self.assertEqual(len(_git(self.root, "worktree", "list").splitlines()), 1, "every mutation worktree removed")
+
 class CoverageForGate(TmpRepoCase):
     """Docs, deleted files and deletion-only edits have nothing to cover: never G-COV-UNVERIFIED."""
 

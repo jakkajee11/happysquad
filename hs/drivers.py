@@ -230,6 +230,13 @@ def _drive(root, rid, cfg, use_wt=False, branch=None, max_parallel=None):
         if a == "error":
             break
         if a == "advance":
+            # an agent writes out.json mid-turn; its log's result line (cost_usd) lands only at exit.
+            # Consume after the child exits so the consume event can read it. Bounded by agent_timeout.
+            live = [p for p in procs.values() if p.poll() is None]
+            if live and any(os.path.isfile(os.path.join(root, f)) and procs[f].poll() is None for f in procs):
+                _kill_overdue(procs, root, rid)
+                time.sleep(min(poll, 1))
+                continue
             before = _nev()
             machine.advance(root, rid, cfg)
             if _nev() == before:
@@ -285,7 +292,10 @@ def _drive(root, rid, cfg, use_wt=False, branch=None, max_parallel=None):
                             pend["dispatched_at"] = "2000-01-01T00:00:00Z"
                     S.save_state(S.run_dir(root, rid), st)
                     machine.resume(root, rid, cfg)
-            if any(os.path.isfile(os.path.join(root, f)) for f in files):
+            # advance only once a landed out.json's agent has exited: the agent writes out.json mid-turn,
+            # and its log's result line (cost_usd) only lands at exit — consume reads it from there
+            landed = [f for f in files if os.path.isfile(os.path.join(root, f))]
+            if landed and all(procs.get(f) is None or procs[f].poll() is not None for f in landed):
                 machine.advance(root, rid, cfg)
                 continue
             time.sleep(poll)

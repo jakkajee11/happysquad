@@ -227,10 +227,26 @@ class Coverage(unittest.TestCase):
 class Verdict(unittest.TestCase):
     REF = "5c56f8c26e4fe4f535adc38f012b3c36d73abea4"
 
-    def gate(self, tests="pass", status="ok", per_file=None, rows=None, ref=None):
+    def gate(self, tests="pass", status="ok", per_file=None, rows=None, ref=None, mut=None):
         ref = ref or self.REF
         return {"tests": tests, "coverage": {"status": status, "total": 90, "per_file": per_file or {"src/a.js": 90}},
-                "redgreen": {"ref": ref, "rows": rows if rows is not None else [{"test": "t/a.js", "kind": "assertion"}]}}
+                "redgreen": {"ref": ref, "rows": rows if rows is not None else [{"test": "t/a.js", "kind": "assertion"}]},
+                "mutation": {"rows": mut if mut is not None else [{"ac": "AC-1", "file": "src/a.js", "find": "x", "replace": "y", "kind": "killed"}]}}
+
+    def test_surviving_mutant_is_a_tester_blocker(self):
+        g = self.gate(mut=[{"ac": "AC-1", "file": "src/a.js", "find": "a * b", "replace": "a + b", "kind": "survived"}])
+        b, _, r = machine.verdict({"findings": []}, g, 80, ["src/a.js"], ["t/a.js"], self.REF)
+        self.assertEqual(([x["id"] for x in b], r), (["G-MUT"], "tester"))
+        self.assertIn("'a * b'→'a + b'", b[0]["desc"])
+
+    def test_mutation_none_and_not_applied_are_majors(self):
+        _, m, _ = machine.verdict({"findings": []}, self.gate(mut=[]), 80, ["src/a.js"], ["t/a.js"], self.REF)
+        self.assertIn("G-MUT-NONE", [x["id"] for x in m])
+        _, m, _ = machine.verdict({"findings": []}, self.gate(mut=[{"ac": "AC-1", "file": "f", "kind": "not-applied", "evidence": "0 times"}]),
+                                  80, ["src/a.js"], ["t/a.js"], self.REF)
+        self.assertIn("G-MUT-NOT-APPLIED", [x["id"] for x in m])
+        _, m, _ = machine.verdict({"findings": []}, self.gate(mut=[]), 80, ["src/a.js"], [], self.REF)
+        self.assertNotIn("G-MUT-NONE", [x["id"] for x in m], "no new tests (refactor/docs): no mutation major")
 
     def test_clean_pass(self):
         b, m, r = machine.verdict({"findings": []}, self.gate(), 80, ["src/a.js"], ["t/a.js"], self.REF)

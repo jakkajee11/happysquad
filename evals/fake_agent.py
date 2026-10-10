@@ -78,7 +78,9 @@ def happy(phase, root, pd, iteration, ws=None, axis=None):
                                                                           "evidence": "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '../src/util.js'"}]}))
             return {"phase": "TEST", "workstream": "util", "test_cmds": [], "coverage_report": None,
                     "test_files": ["test/clamp.test.js"], "new_tests": ["test/clamp.test.js"],
-                    "ac_map": {"AC-2": ["test/clamp.test.js::clamp"]}, "redgreen": "redgreen.json", "findings": []}
+                    "ac_map": {"AC-2": ["test/clamp.test.js::clamp"]}, "redgreen": "redgreen.json", "findings": [],
+                    "mutations": [{"ac": "AC-2", "file": "src/util.js", "find": "Math.min(Math.max(x, lo), hi)",
+                                   "replace": "Math.max(x, lo)", "tests": ["test/clamp.test.js"]}]}
         tf = os.path.join(root, "test", "mul.test.js")
         write(tf, 'import { test } from "node:test";\nimport assert from "node:assert/strict";\n'
                   'import { mul } from "../src/calc.js";\n\ntest("mul", () => {\n  assert.equal(mul(3, 4), 12);\n});\n')
@@ -90,7 +92,9 @@ def happy(phase, root, pd, iteration, ws=None, axis=None):
                                                                        "evidence": "SyntaxError: The requested module does not provide an export named 'mul'"}]}))
         return {"phase": "TEST", "workstream": ws, "test_cmds": [], "coverage_report": None,
                 "test_files": ["test/mul.test.js"], "new_tests": ["test/mul.test.js"],
-                "ac_map": {"AC-1": ["test/mul.test.js::mul"]}, "redgreen": "redgreen.json", "findings": []}
+                "ac_map": {"AC-1": ["test/mul.test.js::mul"]}, "redgreen": "redgreen.json", "findings": [],
+                "mutations": [{"ac": "AC-1", "file": "src/calc.js", "find": "return a * b;", "replace": "return a + b;",
+                               "tests": ["test/mul.test.js"]}]}
     if phase == "REVIEW":
         write(os.path.join(pd, "review.md"), "# Review\n\nClean.\n")
         return {"phase": "REVIEW", "mode": "single", "report": "review.md", "findings": [],

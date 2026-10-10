@@ -116,3 +116,46 @@ def baseline(root, ref, test_cmd, timeout=600, mkdirs=(), env=None):
         code, text, _ = provenance.run_cmd(test_cmd, wt, timeout, env=env)
         text = text.replace(wt, root)  # absolute paths in failure lines must match the live tree's
         return {"ref": ref, "exit": code, "failures": sorted(failure_lines(text)), "evidence": _tail(text)}
+
+def mutate(root, ref, mutations, cmd_tpl, timeout=600, mkdirs=()):
+    """Mutation proof: each {ac, file, find, replace, tests} is applied to a throwaway worktree at `ref`
+    (the change under test, snapshotted), then its tests run there. kind:
+      killed      — a listed test went red: the test pins the behaviour
+      survived    — every listed test stayed green: the test would pass with this bug in
+      not-applied — `find` does not occur exactly once in `file`, or no tests listed
+    One worktree per mutation, so mutations never stack.
+    """
+    rows = []
+    for i, m in enumerate(mutations):
+        row = {"ac": m.get("ac"), "file": m.get("file"), "find": m.get("find"), "replace": m.get("replace")}
+        tests = [t for t in m.get("tests") or [] if t]
+        if not ref or not m.get("file") or not m.get("find") or not tests:
+            rows.append(dict(row, kind="not-applied", evidence="needs file, find and at least one test"))
+            continue
+        with _worktree_at(root, ref, "mut%d" % i, copy=tests, mkdirs=mkdirs) as (wt, err):
+            if err:
+                rows.append(dict(row, kind="not-applied", evidence=err))
+                continue
+            path = os.path.join(wt, m["file"])
+            try:
+                with open(path) as f:
+                    src = f.read()
+            except OSError as e:
+                rows.append(dict(row, kind="not-applied", evidence="cannot read %s: %s" % (m["file"], e)))
+                continue
+            if src.count(m["find"]) != 1:
+                rows.append(dict(row, kind="not-applied", evidence="`find` occurs %d times in %s (needs exactly 1)" % (src.count(m["find"]), m["file"])))
+                continue
+            with open(path, "w") as f:
+                f.write(src.replace(m["find"], m.get("replace") or "", 1))
+            red = None
+            for t in tests:
+                code, text = provenance.run(provenance.split(cmd_tpl.replace("{file}", t)), wt, timeout)
+                if code != 0:
+                    red = (t, code, _tail(text))
+                    break
+            if red:
+                rows.append(dict(row, kind="killed", test=red[0], exit=red[1], evidence=red[2]))
+            else:
+                rows.append(dict(row, kind="survived", evidence="all of %s stayed green" % ", ".join(tests)))
+    return {"ref": ref, "rows": rows}

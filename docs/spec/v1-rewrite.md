@@ -309,6 +309,8 @@ schema ฝังใน hs เป็น dict เดียว ใช้ทั้�
 | tests | `config.test_cmd` (full suite) exit 0; หรือ `pre-existing` (1.1.2): fail แต่ทุกบรรทัด failure ที่ head fail ที่ `base_ref` ด้วย (รัน suite ที่ base ครั้งเดียว cache ใน `baseline-tests.json`) → `G-TESTS-PRE` major | REQ blocker → implementer, `verify = config.test_cmd`; desc ระบุ failure ใหม่เทียบ base |
 | coverage | per-file ของ `IMPLEMENT.files` ≥ threshold (inclusive); `coverage_threshold: null` → ข้าม term | ต่ำกว่า → TEST blocker → tester; status `unsupported` (ไม่มี parser) → ข้าม term + TEST major; status `unparseable` → gate fail, re-dispatch tester |
 | redgreen | ทุกแถวของ `new_tests` มี, `ref == proof_ref`, ไม่มีแถว `green` | TEST blocker → tester |
+| mutation (1.1.9) | ทุก mutant ใน `TEST.mutations` ถูก kill (apply ใน worktree ทิ้งของ snapshot แล้ว test ที่ระบุ red) | `survived` → `G-MUT` blocker → tester; `not-applied` → major; มี `new_tests` แต่ไม่มี mutation → `G-MUT-NONE` major |
+| needs_human (1.1.9) | AC ใน `ARCHITECT.needs_human` ไม่ต้องมี test/หลักฐานใน loop | run COMPLETE พร้อม `needs_human` + `HUMAN-CHECK.md` ใน `done` |
 | `new_tests` ว่าง | อนุญาต (Q1 ปิด: refactor/docs/config COMPLETE ได้) | TEST major "no red-first proof"; reviewer ยกเป็น blocker ได้เมื่อ diff เปลี่ยน behaviour |
 | specialist blockers | union เข้า verdict | ถอดได้เฉพาะผ่าน chief `overrides[{id,reason}]` |
 | reviewer blockers | ไม่มี | FAIL, route ตาม finding |

@@ -216,7 +216,11 @@ class HeadlessFakeDriver(unittest.TestCase):
         self.assertEqual(sum(1 for e in evs if e["event"] == "agent.timeout"), 2, "killed, retried once, killed again")
 
     def test_consume_events_carry_cost_and_done_sums_it(self):
-        env = {"HS_CLAUDE": os.path.join(ROOT, "evals", "fake_claude.py"), "FAKE_SCENARIO": "pass-first"}
+        # FAKE_TAIL_SECS: the agent exits 2 s after writing out.json, as a real one does — the driver
+        # must not consume before the log has its result line
+        cfg_p = os.path.join(self.w, ".happysquad", "config.json")
+        cfg = json.load(open(cfg_p)); cfg["headless"] = {"poll_interval": 0.2}; json.dump(cfg, open(cfg_p, "w"))
+        env = {"HS_CLAUDE": os.path.join(ROOT, "evals", "fake_claude.py"), "FAKE_SCENARIO": "pass-first", "FAKE_TAIL_SECS": "2"}
         r = _hs(self.w, "run", "start", "add mul", "--driver", "fake", "--no-isolate", env=env)
         self.assertEqual(r["status"], "COMPLETE", r)
         rd, _ = _run_dir(self.w)

@@ -162,6 +162,25 @@ def verdict(out, test_gate, threshold, impl_files, new_tests, proof_ref):
     else:
         majors.append({"id": "G-RED-NONE", "severity": "major", "tag": "TEST", "file": None,
                        "desc": "no red-first proof (no new tests)", "route": "tester", "verify": "manual", "source": "gate"})
+    # mutation proof: red-first shows a test touches new code; a killed mutant shows it pins the behaviour.
+    # Most real TEST blockers were "the reviewer ran a mutation and the suite stayed green" — this moves
+    # that check to the tester, before review.
+    mut = (tg.get("mutation") or {}).get("rows") or []
+    survived = [r for r in mut if r.get("kind") == "survived"]
+    unapplied = [r for r in mut if r.get("kind") == "not-applied"]
+    if survived:
+        blockers.append({"id": "G-MUT", "severity": "blocker", "tag": "TEST", "file": survived[0].get("file"),
+                         "desc": "mutant survived — the suite stays green with the bug in: " + "; ".join(
+                             "%s %s: %r→%r" % (r.get("ac"), r.get("file"), (r.get("find") or "")[:40], (r.get("replace") or "")[:40])
+                             for r in survived[:3]), "route": "tester", "verify": "manual", "source": "gate"})
+    if unapplied:
+        majors.append({"id": "G-MUT-NOT-APPLIED", "severity": "major", "tag": "TEST", "file": None,
+                       "desc": "mutation not applied: " + "; ".join("%s %s (%s)" % (r.get("ac"), r.get("file"), r.get("evidence", "")[:60])
+                                                                    for r in unapplied[:3]),
+                       "route": "tester", "verify": "manual", "source": "gate"})
+    if new_tests and not mut:
+        majors.append({"id": "G-MUT-NONE", "severity": "major", "tag": "TEST", "file": None,
+                       "desc": "no mutation proof for the new tests", "route": "tester", "verify": "manual", "source": "gate"})
     route = None
     if blockers:
         if any(b["tag"] == "CONFLICT" for b in blockers) or any(b["route"] == "architecter" for b in blockers):
@@ -325,7 +344,7 @@ def _vars(root, st, cfg, spec):
         "coverage_report": st["cmds"].get("coverage_report"), "threshold": st["coverage_threshold"],
         "feedback_path": rel(os.path.join(rdir, "feedback.md")) if os.path.isfile(os.path.join(rdir, "feedback.md")) else None,
         "implementation_path": None, "test_report_path": None, "gates_summary": None,
-        "owned_files": None, "test_owned_files": None, "ac_list": None, "untestable": None,
+        "owned_files": None, "test_owned_files": None, "ac_list": None, "untestable": None, "needs_human_note": None,
         "workstream": spec.get("ws") or "null", "agent": spec.get("agent"), "inner_pass": st.get("inner_pass", 0),
         "mode": "delta" if st.get("delta") else ("single" if st["review_mode"] == "single" or st.get("lite") else "split-on-risk"),
         "axis": spec.get("axis"), "axis_checklist": None, "risk_matches": None,
@@ -340,6 +359,10 @@ def _vars(root, st, cfg, spec):
         v["test_owned_files"] = (st.get("test_owned") or {}).get(w["name"])
     if st.get("untestable"):
         v["untestable"] = ["%s: %s" % (u["ac"], u["reason"]) for u in st["untestable"]]
+    if st.get("needs_human"):
+        v["needs_human_note"] = ("AC a person checks after the run (needs_human) — the tester does not map them, and the "
+                                 "reviewer does not block on missing rendered/device evidence for them, only on what the code "
+                                 "gets wrong: %s" % "; ".join("%s (%s)" % (h["ac"], h["reason"]) for h in st["needs_human"]))
     if spec.get("agent") == "tester" and spec["schema_phase"] == "TEST":
         v["owned_files"] = v["test_owned_files"]
     impl_dirs = [d for d in st.get("impl_phase_dirs", []) if spec.get("ws") is None or d.endswith("-" + spec["ws"]) or ("-" + spec["ws"] + "-r") in d]
@@ -354,6 +377,9 @@ def _vars(root, st, cfg, spec):
             tg.get("tests"), cov.get("rule"), cov.get("status"), cov.get("total"), cov.get("per_file"), cov.get("unverified"))
         if tg.get("tests_pre"):
             v["gates_summary"] += " failing_at_base_too=%s" % tg["tests_pre"][:10]
+        mrows = (tg.get("mutation") or {}).get("rows") or []
+        if mrows:
+            v["gates_summary"] += " mutants=%s" % ["%s:%s" % (r.get("ac"), r.get("kind")) for r in mrows]
     if spec.get("axis"):
         v["axis_checklist"] = os.path.join(PLUGIN_ROOT, "references", "axis-%s.md" % spec["axis"])
         rk = st.get("risk") or {}
@@ -587,6 +613,14 @@ def _done(root, rdir, st):
     elif st["state"] == "COMPLETE":
         d["suggested_commit"] = "feat: %s" % st["task"].splitlines()[0][:60]
         d["wiki_offer"] = True
+    if st["state"] == "COMPLETE" and st.get("needs_human"):
+        # the loop built these but cannot prove them; a caller must not ship until a person ticks them
+        hc = os.path.join(rdir, "HUMAN-CHECK.md")
+        if not os.path.isfile(hc):
+            S.atomic_write(hc, "# Human check — run %s\n\nThe loop finished, but these AC need a person before this ships:\n\n%s\n"
+                           % (st["run_id"], "\n".join("- [ ] **%s** — %s\n  How: %s" % (h["ac"], h["reason"], h["how"]) for h in st["needs_human"])))
+        d["needs_human"] = [h["ac"] for h in st["needs_human"]]
+        d["human_check"] = rel(hc)
     return d
 
 
@@ -924,6 +958,7 @@ def _after_architect(root, rdir, st, cfg, out, pd):
                           "retry_test": max(prev.get(w["name"], {}).get("retry_test", 0), base_retry)}
                          for w in out["workstreams"]]
     st["untestable"] = out.get("untestable") or []
+    st["needs_human"] = out.get("needs_human") or []
     st["test_owned"] = out.get("test_owned") or {}
     st["ac"] = out["ac"]
     design_src = os.path.join(pd, out["design"])
@@ -1045,7 +1080,14 @@ def _merge_test_gate(st, result):
         rows[r["test"]] = r
     both = (prev.get("tests"), result.get("tests"))
     tests = next((t for t in ("fail", "pre-existing") if t in both), "pass")
+    # mutation rows merge by mutant, like redgreen rows by test: a later pass that re-proposes the same
+    # mutant replaces its row; one that proposes none keeps what was proven
+    mkey = lambda r: (r.get("ac"), r.get("file"), r.get("find"))
+    mrows = {mkey(r): r for r in ((prev.get("mutation") or {}).get("rows") or [])}
+    for r in (result.get("mutation") or {}).get("rows") or []:
+        mrows[mkey(r)] = r
     st["last_test_gate"] = {"iteration": st["iteration"], "tests": tests, "coverage": cov,
+                            "mutation": {"rows": list(mrows.values())} if mrows else None,
                             "tests_new": sorted(set(prev.get("tests_new") or []) | set(result.get("tests_new") or [])),
                             "tests_pre": sorted(set(prev.get("tests_pre") or []) | set(result.get("tests_pre") or [])),
                             "redgreen": {"ref": rg.get("ref") or (prev.get("redgreen") or {}).get("ref"), "rows": list(rows.values())}}

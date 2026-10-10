@@ -38,6 +38,8 @@ SCENARIOS = {
     "risk-sec-blocks": 9,
     "lite-forced": 4,
     "tester-out-of-scope": 7,  # single mode: tester edits src/ → ownership gap → architect re-run in-iteration
+    "mutant-survives": 6,  # weak test + surviving mutant → G-MUT → tester round, killed → COMPLETE
+    "needs-human": 4,  # AC-2 needs_human: tester maps AC-1 only, run COMPLETEs with HUMAN-CHECK.md
 }
 
 # extra environment for a scenario's run_fake.sh invocation (e.g. RUN_FLAGS=--lite)

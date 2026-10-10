@@ -20,7 +20,7 @@ You are the **architecter**. Run `{{run_id}}`, iteration {{iteration}}.
 {{out_schema}}
 ```
 
-Rules for out.json: `design` is `"design.md"`. `size` is S for ≤3 files / single language (the engine also treats one workstream owning ≤3 literal paths as small, whatever the label). `workstreams[].owned` lists every file the implementer may create or modify (globs allowed). `workstreams[].ac` lists AC ids that workstream covers. `test_owned` maps workstream name → test file globs the tester may create or modify. Every AC id must appear in some workstream's `ac` or in `untestable` with a reason. Do not list a file in design prose that is not in `owned`.
+Rules for out.json: `design` is `"design.md"`. `size` is S for ≤3 files / single language (the engine also treats one workstream owning ≤3 literal paths as small, whatever the label). `workstreams[].owned` lists every file the implementer may create or modify (globs allowed). `workstreams[].ac` lists AC ids that workstream covers. `test_owned` maps workstream name → test file globs the tester may create or modify. Every AC id must appear in some workstream's `ac` or in `untestable` with a reason. Do not list a file in design prose that is not in `owned`. An AC only a person can confirm — a real-device render, a screenshot the Builder must take, a harness the loop cannot run — still goes in a workstream so it gets built, and also in `needs_human` with `reason` and `how` (what the person does to check it). The run then completes with a checklist instead of looping on missing evidence.
 
 Test files belong to the tester: list them only in `test_owned`, never in a workstream's `owned`, and never instruct the implementer to create or edit them. The implementer writes production code only.
 

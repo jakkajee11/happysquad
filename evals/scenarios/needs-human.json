@@ -1,0 +1,14 @@
+{
+  "_expect": "COMPLETE",
+  "_note": "ARCHITECT-i1 marks AC-2 (a rendered badge) needs_human. The tester maps only AC-1 (happy path) — validation must accept that because AC-2 is needs_human — and the run COMPLETEs with needs_human: [AC-2] and HUMAN-CHECK.md in the done action. Dispatches: ARCH, IMPL, TEST, REVIEW = 4.",
+  "ARCHITECT-i1": {
+    "out": {
+      "phase": "ARCHITECT", "size": "S", "design": "design.md",
+      "ac": [{"id": "AC-1", "text": "mul(a,b) returns a*b"}, {"id": "AC-2", "text": "the result badge renders green on a real device"}],
+      "needs_human": [{"ac": "AC-2", "reason": "rendered on a real device", "how": "open the calculator on an iPhone and check the badge is green"}],
+      "workstreams": [{"name": "main", "owned": ["src/calc.js"], "depends_on": [], "ac": ["AC-1", "AC-2"]}],
+      "test_owned": {"main": ["test/mul.test.js"]}
+    },
+    "artifacts": {"design.md": "# Design\n\nAC-1: mul(a,b) returns a*b.\nAC-2: badge renders green on a device (needs_human).\n"}
+  }
+}

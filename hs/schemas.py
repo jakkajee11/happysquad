@@ -95,6 +95,11 @@ ROUTES = ("implementer", "tester", "architecter")
 
 AC = obj(id="str", text="str")
 UNTESTABLE = obj(ac="str", reason="str")
+# an AC only a person can confirm (real-device render, a Builder-run harness): the loop builds it, the
+# run still COMPLETEs, and the `done` action lists it for a human to tick (HUMAN-CHECK.md)
+NEEDS_HUMAN = obj(ac="str", reason="str", how="str")
+# a tester-proposed mutant: replace `find` (exactly once) with `replace` in `file`; one of `tests` must go red
+MUTATION = obj(ac="str", file="str", find="str", replace="str", tests=list_of("str"))
 WORKSTREAM = obj(name="str", owned=list_of("str"), depends_on=opt(list_of("str")), ac=list_of("str"))
 
 ARCHITECT = obj(
@@ -103,6 +108,7 @@ ARCHITECT = obj(
     design="str",
     ac=list_of(AC),
     untestable=opt(list_of(UNTESTABLE)),
+    needs_human=opt(list_of(NEEDS_HUMAN)),
     workstreams=list_of(WORKSTREAM),
     test_owned=opt("dict"),
 )
@@ -132,6 +138,7 @@ TEST = obj(
     ac_map="dict",
     untestable=opt(list_of(UNTESTABLE)),
     redgreen=opt(nullable("str")),
+    mutations=opt(list_of(MUTATION)),
     findings=opt(list_of(obj(ac="str", desc="str"))),
 )
 
@@ -229,6 +236,9 @@ def semantic_architect(out):
                         errs.append("ownership overlap: %s and %s both own %r/%r" % (a["name"], b["name"], pa, pb))
     ac_ids = {a["id"] for a in out["ac"]}
     covered = {x for w in ws for x in w["ac"]} | {u["ac"] for u in out.get("untestable") or []}
+    for h in out.get("needs_human") or []:
+        if h["ac"] not in ac_ids:
+            errs.append("needs_human references unknown AC %s" % h["ac"])
     for ac in sorted(ac_ids - covered):
         errs.append("AC %s is in no workstream and not marked untestable" % ac)
     for ac in sorted(covered - ac_ids):
@@ -257,7 +267,7 @@ def semantic(phase, out, state=None, workstream=None):
         for w in state.get("workstreams", []):
             if workstream is None or w["name"] == workstream:
                 req.extend(w.get("ac", []))
-        skip = {u["ac"] for u in state.get("untestable", [])}
+        skip = {u["ac"] for u in state.get("untestable", [])} | {h["ac"] for h in state.get("needs_human", [])}
         return semantic_test(out, [a for a in req if a not in skip])
     return []
 

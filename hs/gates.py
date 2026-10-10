@@ -9,7 +9,7 @@ import os
 import re
 import subprocess
 
-from . import coverage, provenance, redgreen, state as S
+from . import coverage, gitutil, provenance, redgreen, state as S
 
 # gate subprocesses see HS_GATE=1 so a fixture can behave differently under the gate than under an agent
 GATE_ENV = dict(os.environ, HS_GATE="1")
@@ -164,7 +164,21 @@ def gate_test(root, rdir, phase_dir, out, cfg, impl_files, base_ref, rule):
     return dict(ts, gate="test", ok=tests_ok, cmds=results,
                 coverage={"status": cov["status"], "total": cov["total"], "per_file": per_file,
                           "unverified": unverified, "rule": rule, "report": report},
-                redgreen=rg, untrusted=[{"cmd": c, "reason": r} for c, r in rejected])
+                redgreen=rg, mutation=_mutation(root, cfg, out.get("mutations")) if tests_ok else None,
+                untrusted=[{"cmd": c, "reason": r} for c, r in rejected])
+
+def _mutation(root, cfg, mutations):
+    """Run the tester's proposed mutants against a snapshot of the change under test (the working tree
+    now, untracked files included). None when the tester proposed none."""
+    if not mutations:
+        return None
+    ref = gitutil.snapshot(root, "mutation-%d" % os.getpid())
+    rep = cfg.get("coverage_report")
+    try:
+        return redgreen.mutate(root, ref, mutations, cfg.get("redgreen_cmd") or cfg["test_cmd"] + " {file}",
+                               timeout=cfg["gate_timeout"], mkdirs=[os.path.dirname(rep)] if rep else ())
+    finally:
+        gitutil.delete_refs(root, "mutation-%d" % os.getpid())
 
 
 def gate_integration(root, rdir, phase_dir, cfg, base_ref):
@@ -250,7 +264,7 @@ def run_gates(root, rdir, phase_dir, cfg):
                       sorted(set(files)), st.get("base_ref"), rule)
         result.update({"gate": "fix", "build": b, "test": t, "tests": t["tests"], "tests_new": t.get("tests_new"),
                        "tests_pre": t.get("tests_pre"), "coverage": t["coverage"],
-                       "redgreen": t["redgreen"], "cmds": b["cmds"] + t["cmds"],
+                       "redgreen": t["redgreen"], "mutation": t.get("mutation"), "cmds": b["cmds"] + t["cmds"],
                        "ok": b["ok"] and all(v in ("pass", "manual") for v in result["verify"].values())})
     else:
         result.update({"gate": "none", "ok": True})

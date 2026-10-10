@@ -44,6 +44,9 @@ def main():
         f.write(prompt)
     rc = subprocess.run([sys.executable, os.path.join(HERE, "fake_agent.py"), pf, out_file,
                          "--scenario", os.environ.get("FAKE_SCENARIO", "pass-first")]).returncode
+    # a real agent keeps going after writing out.json; the result line lands only at exit
+    import time
+    time.sleep(float(os.environ.get("FAKE_TAIL_SECS", "0")))
     print(json.dumps({"type": "result", "subtype": "success" if rc == 0 else "error", "agent": agent,
                       "total_cost_usd": 0.01, "num_turns": 1, "duration_ms": 1500}))
     sys.exit(rc)
