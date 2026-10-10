@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.6 — 2026-10-10
+
+### Fixed
+- Single-mode runs now enforce the tester's ownership mechanically. Parallel runs had the CONFLICT ownership gate; single mode skips CONFLICT, so "never touch production code" was prompt text plus the reviewer's read. The engine now snapshots the working tree when it dispatches a single-mode TEST (`pre_tree` on the pending entry) and, when the tester finishes, diffs that tree against the working tree: any changed file outside the workstream's `test_owned` (or `generated`) is an ownership gap routed to the architecter, same as an implementer gap — it decides whether the file is test support (add it to `test_owned`) or production code (the implementer's). The implementer already had its own single-mode check, via its declared `files`.
+
 ## 1.1.5 — 2026-10-10
 
 ### Changed

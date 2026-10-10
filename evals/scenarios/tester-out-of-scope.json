@@ -1,0 +1,11 @@
+{
+  "_expect": "COMPLETE",
+  "_dispatches": 7,
+  "_note": "Single mode has no CONFLICT gate, so the engine diffs the tree the tester started from. TEST-i1 writes its test AND edits src/calc.js (outside test_owned) → ownership gap → ARCHITECT-i1-r1 (gap_count 1, same iteration), IMPLEMENT-i1-r1, TEST-i1-r1 (happy: test file only), REVIEW. Sequence: ARCH, IMPL, TEST(out of scope), ARCH-r1, IMPL-r1, TEST-r1, REVIEW = 7.",
+  "TEST-i1": {
+    "files": {
+      "src/calc.js": "export function add(a, b) {\n  return a + b;\n}\n\nexport function sub(a, b) {\n  return a - b;\n}\n\nexport function mul(a, b) {\n  return a * b; // tester was here\n}\n"
+    }
+  },
+  "TEST-i1-r1": {"_note": "explicit happy path: without this key fake_agent falls back to TEST-i1 and repeats the out-of-scope write"}
+}

@@ -8,6 +8,7 @@ ARCHITECT → IMPLEMENT (DAG waves) → TEST (DAG waves) → CONFLICT → RISK �
 
 Every mutating entry point takes the run lock. `next_action` is read-only.
 """
+import fnmatch
 import hashlib
 import os
 import re
@@ -602,6 +603,8 @@ def dispatch(root, run_id, cfg):
             entry = {"phase": sp["phase"], "schema_phase": sp["schema_phase"], "agent": sp["agent"],
                      "ws": sp["ws"], "axis": sp["axis"], "iteration": st["iteration"],
                      "out_file": sp["out_file"], "phase_dir": os.path.relpath(pd, root), "dispatched_at": S.now()}
+            if sp["phase"] == "TEST" and st["mode"] == "single":
+                entry["pre_tree"] = gitutil.worktree_tree(root)  # the tester's starting point, for the ownership check
             st["pending"].append(entry)
             if sp["phase"] in ("IMPLEMENT", "TEST") and sp["ws"]:
                 _ws(st, sp["ws"])["impl" if sp["phase"] == "IMPLEMENT" else "test"] = "dispatched"
@@ -783,6 +786,19 @@ def _consume(root, rdir, st, cfg, p, out):
         S.commit(rdir, st, "gates.start", phase="IMPLEMENT", iteration=st["iteration"], data={"phase_dir": p["phase_dir"], "workstream": p.get("ws")})
         return None
     if phase == "TEST":
+        if st["mode"] == "single" and p.get("pre_tree"):
+            # parallel runs get this from the CONFLICT ownership gate; single mode skips CONFLICT, so diff
+            # the tree the tester started from against now — whatever it touched outside test_owned
+            w = st["workstreams"][0]
+            allowed = list((st.get("test_owned") or {}).get(w["name"], [])) + list(cfg.get("generated") or [])
+            bad = [f for f in gitutil.changed_files(root, p["pre_tree"])
+                   if not any(fnmatch.fnmatch(f, g) or f == g for g in allowed)]
+            if bad:
+                w["test"] = "pending"
+                return _route_architect_from_impl(root, rdir, st, cfg, {"ownership_gap": {
+                    "file": bad[0], "reason": "tester changed a file outside test_owned_files (%d file(s): %s) — "
+                    "test support belongs in test_owned, production code to the implementer" % (len(bad), ", ".join(bad[:5]))}},
+                    w["name"], who="Tester")
         st["test_phase_dirs"].append(p["phase_dir"])
         _spawn_gates(root, rdir, st, pd, ws=p.get("ws"), phase="TEST")
         S.commit(rdir, st, "gates.start", phase="TEST", iteration=st["iteration"], data={"phase_dir": p["phase_dir"], "workstream": p.get("ws")})
@@ -815,7 +831,6 @@ def _consume(root, rdir, st, cfg, p, out):
 
 
 def _unowned(root, st, files, w):
-    import fnmatch
     globs = list(w.get("owned", [])) + list((st.get("test_owned") or {}).get(w["name"], []))
     return [f for f in files if not any(fnmatch.fnmatch(f, g) or f == g for g in globs)]
 
@@ -887,11 +902,11 @@ def _after_architect(root, rdir, st, cfg, out, pd):
     return None
 
 
-def _route_architect_from_impl(root, rdir, st, cfg, out, ws_name):
+def _route_architect_from_impl(root, rdir, st, cfg, out, ws_name, who="Implementer"):
     gap = out.get("ownership_gap")
     reason = ("ownership gap in %s: %s (%s)" % (ws_name, gap["file"], gap["reason"])) if gap else ("design conflict in %s: %s" % (ws_name, out.get("design_conflict")))
     st["gap_count"] = st.get("gap_count", 0) + 1
-    S.atomic_write(os.path.join(rdir, "feedback.md"), "# Feedback for architecter\n\n## Implementer stopped\n%s\n\nUpdate the ownership map / design and re-signal.\n" % reason)
+    S.atomic_write(os.path.join(rdir, "feedback.md"), "# Feedback for architecter\n\n## %s stopped\n%s\n\nUpdate the ownership map / design and re-signal.\n" % (who, reason))
     if st["gap_count"] > 1:
         st["iteration"] += 1
         if st["iteration"] > st["cap"]:
@@ -901,7 +916,7 @@ def _route_architect_from_impl(root, rdir, st, cfg, out, ws_name):
         w["impl"] = "pending"; w["test"] = "pending"
     st["state"] = "ARCHITECT"
     st["retry"] = st.get("retry", 0) + 1 if st["gap_count"] > 1 else 1
-    S.commit(rdir, st, "transition", phase="ARCHITECT", iteration=st["iteration"], data={"from": "IMPLEMENT", "reason": reason[:160]})
+    S.commit(rdir, st, "transition", phase="ARCHITECT", iteration=st["iteration"], data={"from": who.upper(), "reason": reason[:160]})
     return None
 
 

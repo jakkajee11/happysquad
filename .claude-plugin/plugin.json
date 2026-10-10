@@ -1,6 +1,6 @@
 {
   "name": "happysquad",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "Software-development squad for Claude Code: a python3 engine (bin/hs) runs architect \u2192 implement \u2192 test \u2192 conflict gate \u2192 risk-routed specialists \u2192 review with evidence gates, red\u2192green proof, per-finding verify, an inner fix loop and convergence detection; agents are Claude subagents driven either from a session (/happysquad-loop) or headless in an isolated worktree. Plus brainstorm, fleet, stack detector and a project wiki.",
   "author": {
     "name": "happydaddy"

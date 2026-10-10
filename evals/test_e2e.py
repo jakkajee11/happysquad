@@ -37,6 +37,7 @@ SCENARIOS = {
     "risk-sec": 5,
     "risk-sec-blocks": 9,
     "lite-forced": 4,
+    "tester-out-of-scope": 7,  # single mode: tester edits src/ → ownership gap → architect re-run in-iteration
 }
 
 # extra environment for a scenario's run_fake.sh invocation (e.g. RUN_FLAGS=--lite)
