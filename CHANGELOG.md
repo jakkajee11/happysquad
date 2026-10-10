@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.5 — 2026-10-10
+
+### Changed
+- Default perf risk patterns no longer fire on plain queries or HTTP calls. `perf.diff` dropped `SELECT`/`INSERT`/`UPDATE`/`DELETE`/`JOIN`, `.where(`, `.findMany(`, `.toListAsync(`, `.Include(`, `fetch(`, `axios.`, `httpClient.` and `requests.*(`; it keeps `redis`/`memcache`/`memo`, and `perf.paths` (migration, queue, worker, job, scheduler, cache …) is unchanged. Across 29 real runs the old diff patterns triggered 16 perf-specialist dispatches (opus) with 0 blockers and 1 major, mostly on `.where(`; replayed against the new defaults, 18 perf-triggered runs drop to 0. The chief reviewer still covers PERF on every diff. A project `.happysquad/risk-patterns.json` that sets `perf.diff` keeps its own list.
+
 ## 1.1.4 — 2026-10-09
 
 ### Fixed

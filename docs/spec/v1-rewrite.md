@@ -387,7 +387,7 @@ patterns จาก `references/risk-patterns.json` merge กับ `.happysquad/
         "diff":["(?i)cors","Content-Security-Policy"],
         "manifest_deps":true},
  "perf":{"paths":["(?i)migration","(?i)queue","(?i)worker"],
-         "diff":["\\bSELECT\\b","\\.findMany\\(","fetch\\(","(?i)cache"]}}
+         "diff":["(?i)\\bredis\\b","(?i)memcache"]}}
 ```
 
 ทำงานบน diff ที่ exclude `.happysquad` และ `knowledge` แล้ว ผล `risk.json`: `{"axes":["sec"],"matches":[{"file":"src/auth.ts","axis":"sec","pattern":"(?i)auth"}]}`

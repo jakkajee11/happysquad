@@ -1,5 +1,5 @@
 {
-  "_doc": "Default risk patterns for `hs risk` (spec §7.6). Regexes (python re) applied to repo-relative paths and to added diff lines. A project may add/override in .happysquad/risk-patterns.json; set a key to [] to disable it.",
+  "_doc": "Default risk patterns for `hs risk` (spec §7.6). Regexes (python re) applied to repo-relative paths and to added diff lines. A project may add/override in .happysquad/risk-patterns.json; set a key to [] to disable it. perf deliberately has no plain query/HTTP diff patterns (SELECT, .where(, fetch(…): across 29 real runs they fired on ordinary code, and 16 perf dispatches found 0 blockers. The chief reviewer covers PERF on every diff.",
   "sec": {
     "paths": [
       "(?i)auth", "(?i)authn", "(?i)authz", "(?i)permission", "(?i)\\brole", "(?i)token", "(?i)secret",
@@ -16,9 +16,6 @@
   },
   "perf": {
     "paths": ["(?i)migration", "(?i)alembic", "prisma/schema\\.prisma", "(?i)queue", "(?i)worker", "(?i)\\bjob", "(?i)background", "(?i)scheduler", "(?i)cache"],
-    "diff": [
-      "\\bSELECT\\b", "\\bINSERT\\b", "\\bUPDATE\\b", "\\bDELETE\\b", "\\bJOIN\\b", "\\.where\\(", "\\.findMany\\(", "\\.toListAsync\\(",
-      "\\.Include\\(", "\\bfetch\\(", "\\baxios\\.", "httpClient\\.", "\\brequests\\.(get|post|put|delete)\\(", "(?i)\\bredis\\b", "(?i)memcache", "(?i)\\bmemo"
-    ]
+    "diff": ["(?i)\\bredis\\b", "(?i)memcache", "(?i)\\bmemo"]
   }
 }

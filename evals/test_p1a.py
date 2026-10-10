@@ -287,6 +287,27 @@ class RiskDetect(unittest.TestCase):
         self.assertEqual(res["axes"], ["perf", "sec"])
 
 
+class RiskDefaultPerf(unittest.TestCase):
+    """Default patterns: an ordinary query in app code is not a perf risk; a migration or queue path is."""
+
+    def test_plain_query_no_perf_migration_path_perf(self):
+        root = tempfile.mkdtemp(prefix="hs-riskdef-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        _git(root, "init", "-q")
+        with open(os.path.join(root, "README.md"), "w") as f:
+            f.write("init\n")
+        _commit_all(root, "init")
+        files = {"src/orders.js": 'const rows = await db.orders.where({ id }); fetch("/x"); "SELECT * FROM t";\n',
+                 "db/migrations/001_add_index.sql": "create index i on t(c);\n"}
+        for rel, body in files.items():
+            os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+            with open(os.path.join(root, rel), "w") as f:
+                f.write(body)
+        res = risk.detect(root, "HEAD", files=["src/orders.js"])
+        self.assertNotIn("perf", res["axes"], res["matches"])
+        res = risk.detect(root, "HEAD", files=["db/migrations/001_add_index.sql"])
+        self.assertEqual(res["axes"], ["perf"])
+
 class RiskLoadPatterns(unittest.TestCase):
     def test_user_override_disables_one_key_leaves_rest(self):
         root = tempfile.mkdtemp(prefix="hs-riskcfg-")
