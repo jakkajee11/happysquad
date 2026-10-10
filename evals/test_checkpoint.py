@@ -110,6 +110,18 @@ class Checkpoint(unittest.TestCase):
         act2, _ = _drive(self.w, _hs(self.w, "resume"))
         self.assertEqual(act2["action"], "checkpoint", "a new session gets its own hand-off point")
 
+    def test_fresh_session_on_a_late_iteration_dispatches_before_checkpointing(self):
+        # the run-wide iteration term used to hand a just-resumed session straight back (dispatches=0)
+        self.w = _toy_repo({"dispatches": 99, "iterations": 1})
+        _session(self.w, "2026-10-03T10:00:00Z")
+        act, n = _drive(self.w, _hs(self.w, "run", "start", "t", "--driver", "agent-tool"))
+        self.assertEqual((act["action"], n), ("checkpoint", 1), "iteration term needs one dispatch in this session")
+        _session(self.w, "2026-10-03T11:00:00Z")
+        act2 = _hs(self.w, "resume")
+        self.assertNotEqual(act2["action"], "checkpoint", "a session that has dispatched nothing is never told to hand off")
+        act3, n3 = _drive(self.w, act2)
+        self.assertGreaterEqual(n3, 1)
+
     def test_headless_never_checkpoints(self):
         self.w = _toy_repo({"dispatches": 1})
         _session(self.w)

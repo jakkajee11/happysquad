@@ -37,6 +37,11 @@ DEFAULTS = {
     "generated": ["**/pnpm-lock.yaml", "**/package-lock.json", "**/yarn.lock", "**/__snapshots__/**"],
     "headless": {
         "budget_per_phase": 2.0,
+        # minutes per headless agent before it is killed and counted as an agent error (one retry, then
+        # BLOCKED cause=agent). Above the p95 of 60 real runs: architect 105, reviewer 70, tester 35,
+        # specialist 36, implementer 10. A missing agent falls back to "default".
+        "agent_timeout": {"architecter": 120, "reviewer": 120, "tester": 60, "specialist": 60,
+                          "implementer": 30, "default": 60},
         "allowed_tools": "Read,Write,Edit,Grep,Glob,Bash",
         "disallowed_tools": [
             "Bash(git push:*)", "Bash(git reset:*)", "Bash(git clean:*)", "Bash(git checkout:*)",

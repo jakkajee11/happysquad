@@ -29,6 +29,10 @@ def main():
             i += 1
     if prompt is None:
         print(json.dumps({"type": "result", "subtype": "error", "error": "no -p"})); sys.exit(2)
+    # FAKE_HANG=<agent>: that agent never finishes, for the headless agent_timeout test
+    if agent and os.environ.get("FAKE_HANG") == agent:
+        import time
+        time.sleep(3600)
     # the prompt names the out file; fake_agent wants the prompt as a file path
     m = re.search(r"`([^`]*out\.json)`", prompt)
     if not m:
@@ -41,7 +45,7 @@ def main():
     rc = subprocess.run([sys.executable, os.path.join(HERE, "fake_agent.py"), pf, out_file,
                          "--scenario", os.environ.get("FAKE_SCENARIO", "pass-first")]).returncode
     print(json.dumps({"type": "result", "subtype": "success" if rc == 0 else "error", "agent": agent,
-                      "total_cost_usd": 0.0, "num_turns": 1}))
+                      "total_cost_usd": 0.01, "num_turns": 1, "duration_ms": 1500}))
     sys.exit(rc)
 
 

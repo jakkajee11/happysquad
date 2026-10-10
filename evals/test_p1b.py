@@ -199,6 +199,36 @@ class HeadlessFakeDriver(unittest.TestCase):
         branches = subprocess.run(["git", "branch", "--list", "hs/*"], cwd=self.w, capture_output=True, text=True).stdout
         self.assertIn(r["branch"], branches)
 
+    def test_hung_agent_is_killed_retried_once_then_blocked(self):
+        cfg_p = os.path.join(self.w, ".happysquad", "config.json")
+        cfg = json.load(open(cfg_p))
+        cfg["headless"] = {"agent_timeout": {"architecter": 0.05, "default": 60}, "poll_interval": 0.5}  # 3 s
+        json.dump(cfg, open(cfg_p, "w"))
+        env = {"HS_CLAUDE": os.path.join(ROOT, "evals", "fake_claude.py"), "FAKE_SCENARIO": "pass-first",
+               "FAKE_HANG": "architecter"}
+        t0 = time.time()
+        r = _hs(self.w, "run", "start", "add mul", "--driver", "fake", "--no-isolate", env=env)
+        self.assertLess(time.time() - t0, 60, "a hung agent must not hang the run")
+        self.assertEqual((r["status"], r["cause"]), ("BLOCKED", "agent"), r)
+        rd, _ = _run_dir(self.w)
+        self.assertIn("timed out twice", open(os.path.join(rd, "BLOCKED.md")).read())
+        evs = [json.loads(l) for l in open(os.path.join(rd, "events.jsonl")) if l.strip()]
+        self.assertEqual(sum(1 for e in evs if e["event"] == "agent.timeout"), 2, "killed, retried once, killed again")
+
+    def test_consume_events_carry_cost_and_done_sums_it(self):
+        env = {"HS_CLAUDE": os.path.join(ROOT, "evals", "fake_claude.py"), "FAKE_SCENARIO": "pass-first"}
+        r = _hs(self.w, "run", "start", "add mul", "--driver", "fake", "--no-isolate", env=env)
+        self.assertEqual(r["status"], "COMPLETE", r)
+        rd, _ = _run_dir(self.w)
+        cons = [json.loads(l)["data"] for l in open(os.path.join(rd, "events.jsonl")) if '"consume"' in l]
+        self.assertTrue(cons and all(c.get("cost_usd") == 0.01 and c.get("secs") == 1.5 for c in cons), cons)
+        self.assertEqual(r["cost_usd"], round(0.01 * len(cons), 4))
+
+    def test_agent_timeout_lookup(self):
+        self.assertEqual(drivers.agent_timeout({}, "architecter"), 120 * 60)
+        self.assertEqual(drivers.agent_timeout({"headless": {"agent_timeout": {"default": 5}}}, "tester"), 300)
+        self.assertEqual(drivers.agent_timeout({"headless": {"agent_timeout": {"tester": 2}}}, "tester"), 120)
+
     def test_no_isolate_runs_in_place(self):
         env = {"HS_CLAUDE": os.path.join(ROOT, "evals", "fake_claude.py"), "FAKE_SCENARIO": "pass-first"}
         r = _hs(self.w, "run", "start", "add mul", "--driver", "fake", "--no-isolate", env=env)

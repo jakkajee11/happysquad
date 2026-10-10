@@ -10,6 +10,7 @@ Every mutating entry point takes the run lock. `next_action` is read-only.
 """
 import fnmatch
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -479,7 +480,12 @@ def _count_session_dispatch(root, st):
 
 
 def _checkpoint_due(root, st, cfg):
-    """Spec §8.9: agent-tool driver only; iteration ≥ checkpoint.iterations or ≥ checkpoint.dispatches in this session."""
+    """Spec §8.9: agent-tool driver only; this session's dispatches ≥ checkpoint.dispatches, or the run
+    reached checkpoint.iterations and this session has already dispatched something.
+
+    The iteration term is run-wide, so without the "this session dispatched" guard a fresh session
+    resuming an iteration-3 run was told to hand off before doing anything (7 of 13 real checkpoints).
+    """
     if st.get("driver") != "agent-tool" or st.get("checkpointed_session") == _session_id(root):
         return False
     cp = cfg.get("checkpoint") or {}
@@ -489,7 +495,7 @@ def _checkpoint_due(root, st, cfg):
     if not sid:
         return False
     n = (st.get("session_dispatches") or {}).get(sid, 0)
-    return st["iteration"] >= cp.get("iterations", 3) or n >= cp.get("dispatches", 12)
+    return n >= cp.get("dispatches", 12) or (n > 0 and st["iteration"] >= cp.get("iterations", 3))
 
 
 def _write_handoff(root, rdir, st):
@@ -567,6 +573,9 @@ def _done(root, rdir, st):
         d["report"] = os.path.join(st["review_phase_dirs"][-1], "review.md")
     if st.get("verified_coverage") is not None:
         d["coverage"] = st["verified_coverage"]
+    cost = _run_cost(rdir)
+    if cost:
+        d["cost_usd"] = cost
     if st["state"] == "BLOCKED":
         d["blocked_md"] = rel(os.path.join(rdir, "BLOCKED.md"))
     if st["state"] == "COMPLETE" and st.get("review_only"):
@@ -713,7 +722,8 @@ def advance(root, run_id, cfg):
                     return act
                 continue
             S.commit(rdir, st, "consume", phase=p["phase"], iteration=st["iteration"],
-                     data={"phase_dir": p["phase_dir"], "workstream": p.get("ws"), "axis": p.get("axis")})
+                     data=dict({"phase_dir": p["phase_dir"], "workstream": p.get("ws"), "axis": p.get("axis")},
+                               **_agent_usage(rdir, p["phase_dir"])))
             st["validation_retry"] = 0
             act = _consume(root, rdir, st, cfg, p, out)
             if act is not None:
@@ -729,6 +739,43 @@ def advance(root, run_id, cfg):
         S.save_state(rdir, st)
     return next_action(root, run_id, cfg)
 
+
+def _agent_usage(rdir, phase_dir):
+    """cost_usd / turns / secs / model of one dispatch from the headless log's result line, when there is one.
+
+    The headless driver logs `claude -p --output-format json` to runs/<id>/logs/claude-<phase dir>.jsonl;
+    its last JSON object carries total_cost_usd. The agent-tool driver has no such log: returns {}.
+    """
+    log = os.path.join(rdir, "logs", "claude-%s.jsonl" % os.path.basename(phase_dir.rstrip("/")))
+    try:
+        with open(log, errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return {}
+    for line in reversed(lines):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(r, dict) and "total_cost_usd" in r:
+            u = {"cost_usd": round(float(r["total_cost_usd"]), 4), "turns": r.get("num_turns")}
+            if r.get("duration_ms") is not None:
+                u["secs"] = round(r["duration_ms"] / 1000.0, 1)
+            models = list((r.get("modelUsage") or {}).keys())
+            if models:
+                u["model"] = models[0]
+            return u
+    return {}
+
+def _run_cost(rdir):
+    """Sum of every headless log's cost — consumed or not (a failed validation still spent it). None if no logs."""
+    total, seen = 0.0, False
+    for name in os.listdir(os.path.join(rdir, "logs")) if os.path.isdir(os.path.join(rdir, "logs")) else ():
+        if name.startswith("claude-") and name.endswith(".jsonl"):
+            u = _agent_usage(rdir, name[len("claude-"):-len(".jsonl")])
+            if "cost_usd" in u:
+                total += u["cost_usd"]; seen = True
+    return round(total, 4) if seen else None
 
 def _normalize_out(out):
     """Agents sometimes fill optional fields with '' / {} / '(none)' instead of null; treat those as absent."""

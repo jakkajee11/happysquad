@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.8 — 2026-10-10
+
+Unattended-run pass, from 60 real runs (all on the agent-tool driver; 13 checkpoints, 1 run stalled 60 min in ARCHITECT).
+
+### Fixed
+- A fresh session resuming a late-iteration run is no longer told to hand off before it does anything. The checkpoint's iteration term (`iteration ≥ checkpoint.iterations`) is run-wide, so every new session on an iteration-3 run got `checkpoint` straight back — 7 of 13 real checkpoints fired with `dispatches: 0`, each costing a human a pointless new session. The iteration term now needs at least one dispatch in this session; the dispatch term is unchanged.
+
+### Added
+- `headless.agent_timeout`: minutes per headless agent, by agent name (architecter / reviewer 120, tester / specialist 60, implementer 30, default 60 — each above the p95 of the 60 real runs). An agent past its deadline is killed (whole process group), logged as `agent.timeout`, and retried once through the existing no-output path; a second timeout blocks `cause=agent` with "timed out twice (… min)" in `BLOCKED.md`. Before, only `budget_per_phase` bounded a headless agent, so one that kept reading without spending (the real 60-minute stall) hung the run.
+- Per-dispatch cost in `events.jsonl`: each `consume` event carries `cost_usd`, `turns`, `secs` and `model` from the headless log's result line, and the `done` action carries the run's total `cost_usd` (failed validations included). The agent-tool driver has no such log and records nothing, as before.
+
 ## 1.1.7 — 2026-10-10
 
 Architect pass, from 39 real runs (every design one workstream; S 19 / M 20; `design.md` median 1,833 words for a median of 4 owned files).

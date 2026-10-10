@@ -5,6 +5,7 @@ The agent-tool driver is the LLM orchestrator following skills/hs-loop; it needs
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -132,6 +133,14 @@ def isolate(root, run_id):
 
 # --- the headless loop -------------------------------------------------------------
 
+def agent_timeout(cfg, agent):
+    """Seconds a headless agent may run. config.headless.agent_timeout is minutes by agent name; a project
+    value replaces the dict whole (one-level merge), so fall back to its "default", then the built-in one."""
+    user = (cfg.get("headless") or {}).get("agent_timeout") or {}
+    base = C.DEFAULTS["headless"]["agent_timeout"]
+    mins = user.get(agent, user.get("default", base.get(agent, base["default"])))
+    return int(float(mins) * 60)
+
 def _run_one(root, d, cfg, log_dir):
     prompt = open(os.path.join(root, d["prompt_file"])).read()
     argv = claude_argv(d["agent"], d["model"], prompt, cfg, d["out_file"])
@@ -141,7 +150,28 @@ def _run_one(root, d, cfg, log_dir):
     with open(log, "w") as lf:
         p = subprocess.Popen(argv, cwd=root, stdin=subprocess.DEVNULL, stdout=lf, stderr=subprocess.STDOUT,
                              env=env, start_new_session=True)
+    p.hs_deadline = time.time() + agent_timeout(cfg, d["agent"])
+    p.hs_log = log
     return p
+
+def _agent_of(st, out_file):
+    return next((p["agent"] for p in st.get("pending", []) if p["out_file"] == out_file), "default")
+
+def _kill_overdue(procs, root, rid):
+    """Kill every child past its deadline (whole process group); log an agent.timeout event for each.
+
+    The killed child then has no out.json, so the wait loop treats it like any agent that exited
+    without output: one retry, then BLOCKED cause=agent.
+    """
+    now = time.time()
+    for f, p in procs.items():
+        if p.poll() is None and now > getattr(p, "hs_deadline", float("inf")):
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            p.wait()
+            S.append_event(S.run_dir(root, rid), "agent.timeout", data={"out_file": f, "rc": p.returncode})
 
 
 def drive_existing(root, rid, cfg):
@@ -226,6 +256,7 @@ def _drive(root, rid, cfg, use_wt=False, branch=None, max_parallel=None):
         if a == "wait":
             files = act["files"]
             idle = 0
+            _kill_overdue(procs, root, rid)
             # a pending entry with no child process (re-dispatch after heal/resume) must be launched
             for d in act.get("dispatches", []):
                 if d["out_file"] not in procs and not os.path.isfile(os.path.join(root, d["out_file"])):
@@ -243,7 +274,9 @@ def _drive(root, rid, cfg, use_wt=False, branch=None, max_parallel=None):
                     st = S.load_state(S.run_dir(root, rid))
                     retried = st.setdefault("agent_retries", {})
                     if retried.get(f, 0) >= 1:
-                        machine.block_manual(root, rid, cfg, "agent", "headless agent exited rc=%s twice without output: %s" % (rc, f))
+                        why = ("timed out twice (config.headless.agent_timeout: %d min)" % (agent_timeout(cfg, _agent_of(st, f)) // 60)
+                               if getattr(p, "hs_deadline", float("inf")) < time.time() else "exited rc=%s twice without output" % rc)
+                        machine.block_manual(root, rid, cfg, "agent", "headless agent %s: %s" % (why, f))
                         break
                     retried[f] = retried.get(f, 0) + 1
                     S.save_state(S.run_dir(root, rid), st)
