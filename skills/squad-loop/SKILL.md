@@ -28,11 +28,11 @@ HS="${CLAUDE_PLUGIN_ROOT}/bin/hs"
      the files land, or `wait` again with `timed_out: true` — rerun it. If its `dispatches` lists an
      agent whose Agent-tool call already errored, re-send that entry once.
    - `advance` → `$HS advance`.
-   - `ask` → AskUserQuestion with the given options, then `$HS answer <key> <value>`, then `$HS next`.
    - `done` → report in ≤150 words: status, run_id, iterations, files_changed, coverage, report path,
-     suggested_commit (or blocked_md + cause). If `wiki_offer` is true and `knowledge/wiki/index.md`
-     exists, ask once: "Ingest this run into the wiki?" — yes → `/wiki-ingest --latest-run`; never
-     auto-ingest. Stop.
+     suggested_commit (or blocked_md + cause). When present, also report `needs_human` (the AC ids)
+     and `human_check` (the HUMAN-CHECK.md path) verbatim — a caller must not ship those AC until a
+     person ticks them. If `wiki_offer` is true and `knowledge/wiki/index.md` exists, ask once:
+     "Ingest this run into the wiki?" — yes → `/wiki-ingest --latest-run`; never auto-ingest. Stop.
    - `checkpoint` → your context is the limiting resource now, not the engine's. Print `message` and
      the `handoff` path, tell the user to open a fresh session and run `/squad-resume`, and stop.
      Do not dispatch anything further in this session. (Fires at most once per session, only
@@ -55,7 +55,14 @@ on, quiet ones are re-dispatched. Use it instead of `run start` for a run alread
 
 ## Lite
 
-Pass `--lite` for small tasks, or leave it — `hs` auto-selects lite for size-S work.
+Pass `--lite` for small tasks, or leave it — `hs` auto-selects lite for a small design (size S, or one
+workstream owning ≤3 literal paths).
+
+## Design from a ticket
+
+`--design <ticket.md>` (or a ticket whose text contains the block) skips the architect when the ticket
+holds a complete ` ```hs-design ` JSON block. `$HS design-check <ticket.md>` checks one without starting
+a run. Pass the flag through; never write or fix the block yourself.
 
 ## Failure handling
 

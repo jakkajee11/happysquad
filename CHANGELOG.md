@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.11 — 2026-10-11
+
+### Added
+- `hs design-check <ticket.md>`: the public check for a ticket's ` ```hs-design ` block — the same parse `run start --design` uses. Prints `{ok, errors, ac, owned, test_owned, size, needs_human}`; exit 0 ok, 1 unusable block, 2 unreadable file. Asked for by pumpapp, whose slice-breakdown gate was importing the engine-internal `design_from_ticket`.
+
+### Changed
+- `squad-loop` skill: the agent-tool driver's `done` report now carries `needs_human` and `human_check` (headless already printed them), so a caller like the Pump doesn't have to read `HUMAN-CHECK.md` itself to know a slice must wait for a person. The skill also drops the `ask` action (the engine has not emitted it since Q8), describes lite by the 1.1.7 rule, and documents `--design` / `design-check`.
+
 ## 1.1.10 — 2026-10-10
 
 ### Added

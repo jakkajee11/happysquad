@@ -295,6 +295,24 @@ def cmd_wiki(args):
     sys.exit(2)
 
 
+def cmd_design_check(args):
+    """Public check for a ticket's ```hs-design block — the same parse `run start --design` uses.
+    Prints {ok, errors, ac, owned, test_owned, size}; exit 0 ok, 1 unusable, 2 file unreadable."""
+    try:
+        with open(args.ticket) as f:
+            text = f.read()
+    except OSError as e:
+        _out({"ok": False, "errors": ["cannot read %s: %s" % (args.ticket, e)]})
+        sys.exit(2)
+    out, errs = machine.design_from_ticket(text)
+    if errs:
+        _out({"ok": False, "errors": errs})
+        sys.exit(1)
+    w = out["workstreams"][0]
+    _out({"ok": True, "errors": [], "ac": [a["id"] for a in out["ac"]], "owned": w["owned"],
+          "test_owned": out["test_owned"]["main"], "size": out["size"],
+          "needs_human": [h["ac"] for h in out.get("needs_human") or []]})
+
 def cmd_validate(args):
     root = _root(args)
     out = S.read_json(os.path.join(root, args.out_file))
@@ -565,6 +583,10 @@ def main(argv=None):
     v.add_argument("out_file")
     v.add_argument("--phase")
     v.set_defaults(fn=cmd_validate)
+
+    dc = sub.add_parser("design-check", help="check a ticket's ```hs-design block (what --design would accept)")
+    dc.add_argument("ticket")
+    dc.set_defaults(fn=cmd_design_check)
 
     s = sub.add_parser("status")
     s.add_argument("--run")

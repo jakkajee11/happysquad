@@ -161,6 +161,20 @@ class StartFromDesign(unittest.TestCase):
         self.assertEqual(r["status"], "COMPLETE", r)
         self.assertNotIn("ARCHITECT", self._dispatched()[0])
 
+    def test_design_check_command(self):
+        ticket = os.path.join(ROOT, "evals", "fixtures", "tickets", "mul-design.md")
+        p = subprocess.run([HS, "design-check", ticket], cwd=self.w, capture_output=True, text=True)
+        r = json.loads(p.stdout.strip().splitlines()[-1])
+        self.assertEqual((p.returncode, r["ok"], r["ac"], r["owned"], r["size"]), (0, True, ["AC-1"], ["src/calc.js"], "S"))
+        bad = os.path.join(self.w, "bad.md")
+        with open(bad, "w") as f:
+            f.write("no block\n")
+        p = subprocess.run([HS, "design-check", bad], cwd=self.w, capture_output=True, text=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("no ```hs-design block", json.loads(p.stdout)["errors"][0])
+        p = subprocess.run([HS, "design-check", os.path.join(self.w, "missing.md")], cwd=self.w, capture_output=True, text=True)
+        self.assertEqual(p.returncode, 2)
+
     def test_broken_block_falls_back_to_architect(self):
         bad = os.path.join(self.w, "ticket.md")
         with open(bad, "w") as f:
