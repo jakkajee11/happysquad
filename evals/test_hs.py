@@ -41,6 +41,29 @@ class SchemaShape(unittest.TestCase):
         errs = schemas.check("ARCHITECT", _arch(size=3))
         self.assertTrue(errs)
 
+    def test_optional_key_null_is_absent(self):
+        impl = {"phase": "IMPLEMENT", "workstream": None, "files": ["a"], "build_cmds": None, "unmet_ac": None}
+        self.assertEqual(schemas.check("IMPLEMENT", impl), [])
+        impl["build_cmds"] = "npm run build"
+        self.assertTrue(schemas.check("IMPLEMENT", impl), "a wrong-typed optional key is still rejected")
+
+    def test_retired_keys_dropped_not_rejected(self):
+        o = _arch(assumptions=["x"], shared_read_only=["y"])
+        self.assertEqual(schemas.check("ARCHITECT", o), [])
+        self.assertNotIn("assumptions", o)
+        self.assertNotIn("assumptions", schemas.render("ARCHITECT"))
+
+    def test_design_word_cap_by_size(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        p = os.path.join(d, "design.md")
+        with open(p, "w") as f:
+            f.write("word " * 601)
+        errs = schemas.check("ARCHITECT", _arch(size="S"), design_path=p)
+        self.assertTrue(any("601 words; size S allows 600" in e for e in errs), errs)
+        self.assertEqual(schemas.check("ARCHITECT", _arch(size="M"), design_path=p), [])
+        self.assertEqual(schemas.check("ARCHITECT", _arch(size="S")), [], "no design_path → no length check")
+
     def test_bool_is_not_int(self):
         f = {"id": "R-1", "severity": "minor", "tag": "STD", "file": "a", "line": True, "desc": "d",
              "route": "implementer", "verify": "manual"}

@@ -456,7 +456,7 @@ reset counter เมื่อ phase ผ่าน phase dir ใช้ suffix `-r<
 
 ### 8.5 Lite path
 
-เข้าเมื่อ `--lite` หรือ (`size=S` ∧ `lite.auto`) ∧ ไม่ `--full`: design ใช้ `design-template-lite.md`, workstream เดียว, ข้าม CONFLICT/RISK/SPECIALISTS, `review_mode=single`, cap = `lite.cap` (3) red→green, gates, inner fix, convergence ยังทำครบ
+เข้าเมื่อ `--lite` หรือ ((`size=S` ∨ workstream เดียวที่ owned ≤3 path ไม่มี glob) ∧ `lite.auto`): workstream เดียว, ข้าม CONFLICT, cap = `lite.cap` (3) RISK ยังรัน (1.1.7: diff เล็กที่แตะ auth/migration ยังได้ specialist) red→green, gates, inner fix, convergence ยังทำครบ design.md จำกัดความยาวตาม size (S 600 / M 1,500 / L 3,000 คำ) ใน `hs validate`
 
 ### 8.6 BLOCKED
 

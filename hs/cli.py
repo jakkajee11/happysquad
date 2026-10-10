@@ -298,7 +298,8 @@ def cmd_validate(args):
     rid = S.current_run_id(root)
     if rid:
         st = S.load_state(S.run_dir(root, rid))
-    errs = schemas.check(phase, out, st)
+    dp = os.path.join(os.path.dirname(os.path.join(root, args.out_file)), out.get("design") or "design.md")
+    errs = schemas.check(phase, out, st, design_path=dp)
     _out({"ok": not errs, "phase": phase, "errors": errs})
     sys.exit(0 if not errs else 1)
 

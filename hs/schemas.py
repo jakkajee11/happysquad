@@ -51,7 +51,10 @@ def _check(value, spec, path, errors):
             return
         _check(value, arg, path, errors)
     elif kind == "opt":
-        _check(value, arg, path, errors)
+        # an optional key set to null means "not used" — agents write that instead of omitting the key,
+        # and rejecting it cost a whole re-dispatch (seen live: implementer build_cmds/unmet_ac null)
+        if value is not None:
+            _check(value, arg, path, errors)
     elif kind == "enum":
         if value not in arg:
             errors.append("%s: expected one of %s, got %r" % (path, arg, value))
@@ -98,13 +101,16 @@ ARCHITECT = obj(
     phase=enum("ARCHITECT"),
     size=enum("S", "M", "L"),
     design="str",
-    assumptions=opt(list_of("str")),
     ac=list_of(AC),
     untestable=opt(list_of(UNTESTABLE)),
     workstreams=list_of(WORKSTREAM),
     test_owned=opt("dict"),
-    shared_read_only=opt(list_of("str")),
 )
+# keys an older prompt asked for that nothing reads; dropped before validation instead of failing it
+RETIRED = {"ARCHITECT": ("assumptions", "shared_read_only")}
+# design.md word caps by size: every later phase reads design.md, so length is a per-dispatch cost.
+# Real runs (2026-10-10): S median ~1,600 words, M ~2,100, for a median of 4 owned files.
+DESIGN_WORDS = {"S": 600, "M": 1500, "L": 3000}
 
 IMPLEMENT = obj(
     phase=enum("IMPLEMENT"),
@@ -256,15 +262,34 @@ def semantic(phase, out, state=None, workstream=None):
     return []
 
 
-def check(phase, out, state=None, workstream=None):
-    """Shape + semantics. Returns a list of error strings (empty = valid)."""
+def design_length(out, design_path):
+    """design.md over its size cap → one error naming the counts; missing file → no error (shape owns that)."""
+    try:
+        with open(design_path, errors="replace") as f:
+            n = len(f.read().split())
+    except OSError:
+        return []
+    cap = DESIGN_WORDS.get(out.get("size"))
+    if cap and n > cap:
+        return ["design.md is %d words; size %s allows %d — cut to AC, owned files and the decisions the "
+                "implementer can't infer from the repo" % (n, out["size"], cap)]
+    return []
+
+def check(phase, out, state=None, workstream=None, design_path=None):
+    """Shape + semantics (+ design length for ARCHITECT when design_path is given). Empty list = valid."""
     spec = BY_PHASE.get(phase)
     if spec is None:
         return ["unknown phase %r" % phase]
+    if isinstance(out, dict):
+        for k in RETIRED.get(phase, ()):
+            out.pop(k, None)
     errs = validate(out, spec)
     if errs:
         return errs
-    return semantic(phase, out, state, workstream)
+    errs = semantic(phase, out, state, workstream)
+    if not errs and phase == "ARCHITECT" and design_path:
+        errs = design_length(out, design_path)
+    return errs
 
 
 # --- rendering for prompts ---------------------------------------------------

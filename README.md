@@ -56,7 +56,7 @@ Between phases, `hs` (not the LLM) checks:
 - **Risk → specialists** — a regex pass over the diff (`references/risk-patterns.json`) decides whether `security`/`performance` specialists get dispatched alongside the chief reviewer.
 - **Verdict** — `hs` computes PASS/FAIL from a truth table over tests / coverage / redgreen / specialist findings / reviewer findings. The reviewer never emits a verdict, only findings with a `verify` command each.
 
-A FAIL where every blocker has a `verify` command takes the **inner fix loop** instead of a full round: fix → re-verify → gates → a delta review of just the fix (capped at `inner_cap` passes). **Convergence**: a blocker seen twice routes normally, a third time forces the architecter, and a repeat after that (or two rounds that fixed nothing) stops the run `BLOCKED cause=convergence`. A `size: S` design auto-enters the **lite path** — one workstream, no CONFLICT/RISK/SPECIALISTS, `review_mode=single` — unless `--full` is passed.
+A FAIL where every blocker has a `verify` command takes the **inner fix loop** instead of a full round: fix → re-verify → gates → a delta review of just the fix (capped at `inner_cap` passes). **Convergence**: a blocker seen twice routes normally, a third time forces the architecter, and a repeat after that (or two rounds that fixed nothing) stops the run `BLOCKED cause=convergence`. A small design auto-enters the **lite path** — `size: S`, or one workstream owning ≤3 literal paths whatever the label: one workstream, no CONFLICT, iteration cap `lite.cap`. RISK still runs, so a small diff that touches auth or a migration still gets its specialist.
 
 `BLOCKED` causes the engine produces today: `validation` (out.json kept failing schema), `gate` (build/test kept failing), `convergence` (cap hit or a recurring blocker), `agent` (a headless `claude -p` dispatch errored twice with no output). Each writes `BLOCKED.md` with the iteration history and what was tried. (`test_cmd` missing is checked before a run even starts — it's reported as a plain error, not a BLOCKED run.)
 
@@ -104,7 +104,7 @@ All keys live in `hs/config.py` `DEFAULTS`; `.happysquad/config.json` overrides 
 | `review_mode` | `"split-on-risk"` | when specialists are dispatched alongside the chief reviewer |
 | `max_parallel` | 4 | concurrent workstream dispatches / headless subprocesses |
 | `models.*` | architecter/reviewer/specialist/product = opus, implementer/tester = sonnet | per-agent model override |
-| `lite.auto` / `lite.cap` | `true` / 3 | size-S designs auto-enter the lite path; its own iteration cap |
+| `lite.auto` / `lite.cap` | `true` / 3 | small designs (size S, or ≤3 literal owned paths) auto-enter the lite path; its own iteration cap |
 | `escalation.model` | `null` | one borrowed fix round on this model for the implementer/tester the first time convergence would force an architecter round; once per run |
 | `checkpoint.enabled` / `.iterations` / `.dispatches` | `true` / 3 / 12 | agent-tool driver: hand off to a fresh session (`checkpoint` action + `HANDOFF.md`) once per session after this many iterations or dispatches; headless runs never checkpoint |
 | `build_cmd` / `test_cmd` / `coverage_report` | `null` | seeded by `hs init`; `test_cmd` is required to start a run |

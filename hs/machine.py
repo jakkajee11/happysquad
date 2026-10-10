@@ -703,7 +703,8 @@ def advance(root, run_id, cfg):
                 continue
             try:
                 out = S.read_json(of)
-                errs = schemas.check(p["schema_phase"], out, st, workstream=p.get("ws")) if out is not None else ["out.json empty"]
+                dp = os.path.join(root, p["phase_dir"], (out or {}).get("design") or "design.md")
+                errs = schemas.check(p["schema_phase"], out, st, workstream=p.get("ws"), design_path=dp) if out is not None else ["out.json empty"]
             except ValueError as e:
                 out, errs = None, ["out.json is not valid JSON: %s" % e]
             if errs:
@@ -882,7 +883,14 @@ def _after_architect(root, rdir, st, cfg, out, pd):
     if os.path.isfile(design_src):
         with open(design_src) as f:
             S.atomic_write(os.path.join(rdir, "design.md"), f.read())
-    if not st.get("lite") and out["size"] == "S" and cfg["lite"]["auto"] and not st.get("lite_forced"):
+    # small by the numbers, whatever the label: one workstream owning ≤3 literal paths (no globs).
+    # Real runs labelled 2-file designs M and missed the lite path.
+    owned = [g for w in out["workstreams"] for g in w["owned"]]
+    small = len(out["workstreams"]) == 1 and len(owned) <= 3 and not any(c in g for g in owned for c in "*?[")
+    if small and out["size"] != "S":
+        S.append_event(rdir, "size", phase="ARCHITECT", iteration=st["iteration"],
+                       data={"label": out["size"], "owned": owned, "lite": True})
+    if not st.get("lite") and (out["size"] == "S" or small) and cfg["lite"]["auto"] and not st.get("lite_forced"):
         st["lite"] = True
         st["cap"] = min(st["cap"], cfg["lite"]["cap"])
     if st.get("lite") or len(st["workstreams"]) == 1 or cfg.get("no_parallel"):
@@ -1073,7 +1081,11 @@ def _step(root, rdir, st, cfg):
             S.commit(rdir, st, "gates.start", phase="CONFLICT", iteration=st["iteration"], data={"phase_dir": os.path.relpath(pd, root)})
             return None
         if phase == "RISK":
-            mode = "single" if (st.get("lite") or st["review_mode"] == "single") else st["review_mode"]
+            # lite no longer skips risk routing: a 2-file diff touching auth/ still gets the security
+            # specialist. lite still means a short design, cap 3 and a single chief review otherwise.
+            mode = "single" if st["review_mode"] == "single" else st["review_mode"]
+            if mode == "split" and st.get("lite"):
+                mode = "split-on-risk"
             if mode == "single":
                 st["risk"] = {"axes": [], "matches": [], "skipped": "single"}
                 st["specialists"] = {}

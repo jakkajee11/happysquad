@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.7 — 2026-10-10
+
+Architect pass, from 39 real runs (every design one workstream; S 19 / M 20; `design.md` median 1,833 words for a median of 4 owned files).
+
+### Fixed
+- The architecter can run `hs validate`. Its prompt told it to, but its tools were `Read, Grep, Glob, Write`, so a malformed `out.json` was only caught at `advance` and cost a whole opus re-dispatch. It now has `Bash`, scoped in prose to the validate command.
+- An optional `out.json` key set to `null` counts as absent instead of failing validation. Seen live: an implementer wrote `"build_cmds": null, "unmet_ac": null` and was re-dispatched for it. A wrong-typed value is still rejected.
+
+### Changed
+- A small design takes the lite path whatever its label: one workstream owning ≤3 literal paths (no globs) is small even when labelled M (two real runs labelled 2-file designs M). A `size` event records the relabel.
+- The lite path no longer skips risk routing. It still means one workstream, no CONFLICT and `lite.cap`; RISK now runs, so a small diff touching auth or a migration still gets its specialist.
+- `hs validate` (and the engine's own check) caps `design.md` by size: S 600 words, M 1,500, L 3,000. Every later phase reads it on every dispatch. The architect prompt says so and asks for what the implementer can't infer from the repo.
+- `assumptions` and `shared_read_only` are retired from the ARCHITECT schema; nothing read them. Assumptions go in `design.md`. An older `out.json` that still carries them is accepted (the keys are dropped before validation).
+- `agents/hs-architecter.md` drops the workstream rules that `prompts/architect.md` already carries. The prompt now says a task too big for one design should be split into separate tasks before it reaches the architect.
+
 ## 1.1.6 — 2026-10-10
 
 ### Fixed
